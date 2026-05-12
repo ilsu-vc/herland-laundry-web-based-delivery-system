@@ -125,25 +125,61 @@ router.post('/lookup-email', async (req, res) => {
 
         const cleanPhone = phone.replace(/\D/g, '');
 
-        // Find the user profile that has this phone number
-        const { data: profile, error: profileError } = await supabase
+        // Build all possible format variations of this phone number
+        let variants = [cleanPhone]; // e.g. "09764705515"
+        
+        if (cleanPhone.startsWith('09')) {
+            variants.push(cleanPhone.substring(1));            // "9764705515"
+            variants.push('63' + cleanPhone.substring(1));     // "639764705515"
+            variants.push('+63' + cleanPhone.substring(1));    // "+639764705515"
+        } else if (cleanPhone.startsWith('9') && cleanPhone.length === 10) {
+            variants.push('0' + cleanPhone);                   // "09764705515"
+            variants.push('63' + cleanPhone);                  // "639764705515"
+            variants.push('+63' + cleanPhone);                 // "+639764705515"
+        } else if (cleanPhone.startsWith('63')) {
+            variants.push('0' + cleanPhone.substring(2));      // "09764705515"
+            variants.push(cleanPhone.substring(2));            // "9764705515"
+            variants.push('+' + cleanPhone);                   // "+639764705515"
+        }
+
+        // --- Strategy 1: Search profiles table ---
+        const { data: profile } = await supabase
             .from('profiles')
             .select('id')
-            .eq('phone_number', cleanPhone)
+            .in('phone_number', variants)
             .maybeSingle();
 
-        if (profileError || !profile) {
-            return res.status(404).json({ error: 'No account found with this mobile number.' });
+        if (profile) {
+            const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(profile.id);
+            if (!authError && authUser?.user?.email) {
+                return res.status(200).json({ email: authUser.user.email });
+            }
         }
 
-        // Use the admin API to get the user's email from auth.users
-        const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(profile.id);
+        // --- Strategy 2: Search auth.users (phone field + user_metadata.phone) ---
+        // This catches accounts where phone_number was never saved to profiles
+        const { data: listData, error: listError } = await supabase.auth.admin.listUsers({ perPage: 1000 });
 
-        if (authError || !authUser?.user?.email) {
-            return res.status(404).json({ error: 'Unable to find email for this account.' });
+        if (!listError && listData?.users) {
+            for (const user of listData.users) {
+                // Check the auth phone field (E.164 format like +639764705515)
+                const authPhone = (user.phone || '').replace(/\D/g, '');
+                // Check user_metadata.phone (could be 09764705515 format)
+                const metaPhone = (user.user_metadata?.phone || '').replace(/\D/g, '');
+
+                const authMatches = authPhone && variants.includes(authPhone);
+                const metaMatches = metaPhone && variants.includes(metaPhone);
+
+                if (authMatches || metaMatches) {
+                    if (user.email) {
+                        return res.status(200).json({ email: user.email });
+                    }
+                }
+            }
         }
 
-        res.status(200).json({ email: authUser.user.email });
+        console.log('Phone lookup failed for all strategies. Tried variants:', variants);
+        return res.status(404).json({ error: 'No account found with this mobile number.' });
     } catch (err) {
         console.error('Lookup Email Error:', err.message);
         res.status(500).json({ error: 'Internal server error' });
