@@ -45,26 +45,97 @@ export default function Login() {
     try {
       let emailToAuth = value;
 
-      // If user is logging in with mobile number, look up their email via our backend
+      // If user is logging in with mobile number, look up their email
       if (mode === 'mobile') {
         const cleanPhone = value.replace(/\D/g, '');
 
-        // Call our backend to find the email linked to this phone number
-        const backendUrl = import.meta.env.VITE_API_URL || '';
-        const lookupRes = await fetch(`${backendUrl}/api/v1/auth/lookup-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: cleanPhone }),
-        });
+        // Build all possible format variants of the phone number
+        // so we match however it was stored in the profiles table
+        let variants = [cleanPhone];
+        if (cleanPhone.startsWith('09')) {
+          variants.push(cleanPhone.substring(1));           // 9xxxxxxxxx
+          variants.push('63' + cleanPhone.substring(1));    // 63xxxxxxxxx
+          variants.push('+63' + cleanPhone.substring(1));   // +63xxxxxxxxx
+        } else if (cleanPhone.startsWith('9') && cleanPhone.length === 10) {
+          variants.push('0' + cleanPhone);                  // 09xxxxxxxxx
+          variants.push('63' + cleanPhone);                 // 63xxxxxxxxx
+          variants.push('+63' + cleanPhone);                // +63xxxxxxxxx
+        }
 
-        if (!lookupRes.ok) {
-          const errData = await lookupRes.json().catch(() => ({}));
-          setError(errData.error || 'No account found with this mobile number.');
+        let foundEmail = null;
+
+        // Strategy 1: Query profiles table directly (no backend needed)
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('email')
+            .in('phone_number', variants)
+            .maybeSingle();
+
+          if (!profileError && profile?.email) {
+            foundEmail = profile.email;
+          }
+        } catch (_) {
+          // profiles table may not have email column yet — continue to fallback
+        }
+
+        // Strategy 2: Fall back to backend /lookup-email endpoint
+        if (!foundEmail) {
+          try {
+            const backendUrl = import.meta.env.VITE_API_URL || '';
+            const lookupRes = await fetch(`${backendUrl}/api/v1/auth/lookup-email`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phone: cleanPhone }),
+            });
+
+            if (lookupRes.ok) {
+              const lookupData = await lookupRes.json();
+              if (lookupData?.email) {
+                foundEmail = lookupData.email;
+              }
+            }
+          } catch (_) {
+            // Backend unreachable — continue
+          }
+        }
+
+        // Strategy 3: Try direct phone sign-in (works if Phone provider is enabled in Supabase)
+        if (!foundEmail) {
+          let e164Phone = cleanPhone;
+          if (e164Phone.startsWith('09')) e164Phone = '63' + e164Phone.substring(1);
+          else if (e164Phone.startsWith('9') && e164Phone.length === 10) e164Phone = '63' + e164Phone;
+
+          const { data: phoneSignIn, error: phoneSignInError } = await supabase.auth.signInWithPassword({
+            phone: '+' + e164Phone,
+            password,
+          });
+
+          if (!phoneSignInError && phoneSignIn?.user) {
+            // Phone sign-in succeeded — redirect based on role
+            const userId = phoneSignIn.user.id;
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', userId)
+              .single();
+
+            const role = profile?.role || 'Customer';
+            window.sessionStorage.setItem('activeRole', role);
+
+            if (role === 'Admin') navigate('/admin');
+            else if (role === 'Staff') navigate('/staff');
+            else if (role === 'Rider') navigate('/rider');
+            else navigate('/user');
+            return;
+          }
+
+          // If phone sign-in also fails, show the error
+          setError('No account found with this mobile number.');
           return;
         }
 
-        const { email } = await lookupRes.json();
-        emailToAuth = email;
+        emailToAuth = foundEmail;
       }
 
       // Always authenticate using email

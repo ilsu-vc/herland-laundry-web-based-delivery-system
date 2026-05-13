@@ -67,12 +67,13 @@ app.post('/api/v1/auth/register', async (req, res) => {
     });
     if (error) return res.status(400).json({ error: error.message });
 
-    // Save phone number and full name to the profiles table
+    // Save phone number, full name, and email to the profiles table
     const userId = data.user?.id;
     if (userId) {
         const profileUpdate = {};
         if (metadata?.phone) profileUpdate.phone_number = metadata.phone;
         if (metadata?.full_name) profileUpdate.full_name = metadata.full_name;
+        if (email) profileUpdate.email = email;
 
         if (Object.keys(profileUpdate).length > 0) {
             const { error: profileError } = await supabase

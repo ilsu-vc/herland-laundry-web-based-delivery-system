@@ -35,6 +35,26 @@ router.post('/register', async (req, res) => {
         const { data, error } = await supabase.auth.signUp(signUpOptions);
 
         if (error) return res.status(400).json({ error: error.message });
+
+        // Save phone number, full name, and email to the profiles table
+        const userId = data.user?.id;
+        if (userId) {
+            const profileUpdate = {};
+            if (metadata?.phone) profileUpdate.phone_number = metadata.phone;
+            if (metadata?.full_name) profileUpdate.full_name = metadata.full_name;
+            if (email) profileUpdate.email = email;
+
+            if (Object.keys(profileUpdate).length > 0) {
+                const { error: profileError } = await supabase
+                    .from('profiles')
+                    .upsert({ id: userId, ...profileUpdate }, { onConflict: 'id' });
+
+                if (profileError) {
+                    console.error('Profile update error:', profileError.message);
+                }
+            }
+        }
+
         res.status(201).json({ message: 'User registered successfully', data });
     } catch (err) {
         console.error("Register Error:", err);
@@ -145,13 +165,21 @@ router.post('/lookup-email', async (req, res) => {
         // --- Strategy 1: Search profiles table ---
         const { data: profile } = await supabase
             .from('profiles')
-            .select('id')
+            .select('id, email')
             .in('phone_number', variants)
             .maybeSingle();
 
         if (profile) {
+            // If profiles already has email, return it immediately
+            if (profile.email) {
+                return res.status(200).json({ email: profile.email });
+            }
+
+            // Otherwise, get email from auth and backfill it into profiles
             const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(profile.id);
             if (!authError && authUser?.user?.email) {
+                // Backfill email into profiles for future direct lookups
+                await supabase.from('profiles').update({ email: authUser.user.email }).eq('id', profile.id);
                 return res.status(200).json({ email: authUser.user.email });
             }
         }
@@ -172,6 +200,12 @@ router.post('/lookup-email', async (req, res) => {
 
                 if (authMatches || metaMatches) {
                     if (user.email) {
+                        // Backfill email and phone into profiles for future direct lookups
+                        const phoneToStore = metaPhone ? ('0' + (metaPhone.startsWith('63') ? metaPhone.substring(2) : metaPhone)) : cleanPhone;
+                        await supabase.from('profiles').upsert(
+                            { id: user.id, email: user.email, phone_number: phoneToStore },
+                            { onConflict: 'id' }
+                        );
                         return res.status(200).json({ email: user.email });
                     }
                 }
