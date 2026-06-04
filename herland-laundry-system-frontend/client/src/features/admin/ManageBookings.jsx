@@ -17,6 +17,7 @@ import VerticalStepper from '../../shared/components/VerticalStepper';
 import { supabase } from '../../lib/supabase';
 import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
 import { useConfirm } from "../../shared/components/ConfirmationModal";
+import BookNow from "../auth/BookNow";
 
 import { GOOGLE_MAPS_LIBRARIES } from "../../shared/constants/maps";
 
@@ -202,6 +203,7 @@ export default function ManageBookings() {
   const confirm = useConfirm();
   const [bookings, setBookings] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all"); // New state
   const [selectedMonth, setSelectedMonth] = useState("All Time");
   const [currentPage, setCurrentPage] = useState(1);
@@ -278,7 +280,10 @@ export default function ManageBookings() {
     });
   }, [selectedBooking]);
 
-  const toggleExpand = (id) => setExpandedId(expandedId === id ? null : id);
+  const toggleExpand = (id) => {
+    setExpandedId(expandedId === id ? null : id);
+    setIsEditing(false);
+  };
 
   const applyAction = async (bookingId, actionLabel) => {
     // Special handling for Cancel Booking - show modal first
@@ -760,28 +765,41 @@ export default function ManageBookings() {
 
         return (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-white px-4 py-6 sm:py-10">
-            <div className="mx-auto w-full max-w-2xl md:max-w-5xl lg:max-w-6xl">
-              <header className="mb-6 flex items-center gap-2 text-[#3878c2]">
-                <button
-                  type="button"
-                  onClick={() => setExpandedId(null)}
-                  className="inline-flex items-center"
-                  aria-label="Back to bookings"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-                  </svg>
-                </button>
-                <h1 className="text-2xl font-semibold">Booking Details</h1>
-                <div className="ml-auto">
+            {isEditing ? (
+              <BookNow 
+                inlineEditId={selectedBooking.id} 
+                onEditSuccess={() => {
+                  setIsEditing(false);
+                  fetchBookings();
+                }}
+                onCancel={() => setIsEditing(false)}
+              />
+            ) : (
+              <div className="mx-auto w-full max-w-2xl md:max-w-5xl lg:max-w-6xl">
+                <header className="mb-6 flex items-center gap-2 text-[#3878c2]">
                   <button
-                    onClick={() => window.open(`/book?edit=${selectedBooking.id}`, '_blank')}
-                    className="rounded-lg border border-[#3878c2] px-3 py-1.5 text-sm font-medium text-[#3878c2] hover:bg-[#3878c2]/5 transition"
+                    type="button"
+                    onClick={() => {
+                      setExpandedId(null);
+                      setIsEditing(false);
+                    }}
+                    className="inline-flex items-center"
+                    aria-label="Back to bookings"
                   >
-                    Edit Booking
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                    </svg>
                   </button>
-                </div>
-              </header>
+                  <h1 className="text-2xl font-semibold">Booking Details</h1>
+                  <div className="ml-auto">
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="rounded-lg border border-[#3878c2] px-3 py-1.5 text-sm font-medium text-[#3878c2] hover:bg-[#3878c2]/5 transition"
+                    >
+                      Edit Booking
+                    </button>
+                  </div>
+                </header>
 
               <div className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
@@ -1024,7 +1042,8 @@ export default function ManageBookings() {
                 </section>
               </div>
             </div>
-          </div>
+          )}
+        </div>
         );
       })()}
 

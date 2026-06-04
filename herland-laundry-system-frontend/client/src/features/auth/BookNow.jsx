@@ -15,11 +15,11 @@ const defaultCenter = { lat: 14.537751, lng: 121.001379 }; // Pasay approximate
 /* =========================
    Parent Component
 ========================= */
-export default function BookNow() {
+export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [searchParams] = useSearchParams();
-  const editId = searchParams.get("edit");
+  const editId = inlineEditId || searchParams.get("edit");
   const isEditMode = !!editId;
   
   const [step, setStep] = useState(() => {
@@ -220,7 +220,11 @@ export default function BookNow() {
             const data = await response.json();
             if (data.status.toLowerCase() !== "pending") {
               showToast("Only pending bookings can be edited.", "error");
-              navigate("/bookings");
+              if (onCancel) {
+                onCancel();
+              } else {
+                navigate("/bookings");
+              }
               return;
             }
             // Hydrate state
@@ -332,6 +336,23 @@ export default function BookNow() {
 
   return (
     <div className="min-h-screen bg-white px-4 py-6 sm:px-3 md:px-2">
+      {inlineEditId && (
+        <div className="max-w-none lg:max-w-7xl mx-auto px-4 py-3 border-b border-gray-200 flex items-center justify-between mb-4 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-2 text-[#3878c2]">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="inline-flex items-center text-sm font-semibold hover:opacity-80 transition"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-5 mr-1">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+              </svg>
+              Cancel Editing
+            </button>
+          </div>
+          <span className="text-xs text-gray-500 font-medium">Editing Booking: {inlineEditId}</span>
+        </div>
+      )}
       {/* Stepper Container */}
       <div className="max-w-none lg:max-w-7xl mx-auto mb-4 pt-2 overflow-visible">
         <style>
@@ -1629,7 +1650,11 @@ function StepReview({
                 
                 if (isEditMode) {
                   showToast("Booking updated successfully.", "success");
-                  navigate(`/bookings/${editId}`);
+                  if (onEditSuccess) {
+                    onEditSuccess();
+                  } else {
+                    navigate(`/bookings/${editId}`);
+                  }
                   return;
                 }
 
