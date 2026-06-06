@@ -18,7 +18,7 @@ export default function BookingDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
-  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [selectedFeedback, setSelectedFeedback] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
   const [editTimeLeft, setEditTimeLeft] = useState(null); // seconds remaining, null = not computed yet
   const editWarningShown = useRef(false);
@@ -144,8 +144,8 @@ export default function BookingDetails() {
   };
 
   const handleSubmitFeedback = async () => {
-    if (feedbackRating === 0) {
-      showToast("Please select a rating.", "error");
+    if (selectedFeedback === 0) {
+      showToast("Please select feedback.", "error");
       return;
     }
 
@@ -166,7 +166,7 @@ export default function BookingDetails() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          rating: feedbackRating,
+          rating: selectedFeedback,
           comment: feedbackComment,
         }),
       });
@@ -194,7 +194,7 @@ export default function BookingDetails() {
     ];
 
     // Check if terminal statuses exist
-    const hasCompleted = timeline.some((s) => s.status === "Booking Completed");
+    const hasCompleted = timeline.some((s) => s.status === "Laundry Delivered");
     const hasCancelled = timeline.some((s) => s.status === "Booking Cancelled");
     const hasFlagged = timeline.some((s) => s.status === "Payment Flagged");
     if (hasCompleted || hasCancelled || hasFlagged) return timeline;
@@ -220,7 +220,8 @@ export default function BookingDetails() {
 
     futureSteps.push("In Progress");
     futureSteps.push(isDelivery ? "Out for Delivery" : "Ready for Pick-up");
-    futureSteps.push("Booking Completed");
+    futureSteps.push("Laundry Delivered");
+    futureSteps.push("Feedback Submitted");
 
     // Add any future steps that haven't been reached yet (with null timestamp)
     const result = [...timeline];
@@ -600,13 +601,13 @@ export default function BookingDetails() {
                         <button
                           key={star}
                           type="button"
-                          onClick={() => setFeedbackRating(star)}
+                          onClick={() => setSelectedFeedback(star)}
                           className="focus:outline-none transition-transform hover:scale-110"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 24 24"
-                            fill={star <= feedbackRating ? "#facc15" : "#e5e7eb"}
+                            fill={star <= selectedFeedback ? "#facc15" : "#e5e7eb"}
                             className="size-8"
                           >
                             <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
@@ -624,10 +625,10 @@ export default function BookingDetails() {
 
                     <button
                       onClick={handleSubmitFeedback}
-                      disabled={submittingFeedback || feedbackRating === 0}
+                      disabled={submittingFeedback || selectedFeedback === 0}
                       className="w-full rounded-xl bg-[#3878c2] py-3 text-sm font-bold text-white shadow-md hover:bg-[#2d62a3] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
-                      {submittingFeedback ? "Submitting..." : "Submit Review"}
+                      {submittingFeedback ? "Submitting..." : "Submit Feedback"}
                     </button>
                   </div>
                 )}

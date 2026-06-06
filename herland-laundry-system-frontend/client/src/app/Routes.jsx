@@ -7,6 +7,7 @@ const BookNow = lazy(() => import('../features/auth/BookNow'))
 const PaymentForm = lazy(() => import('../features/auth/PaymentForm'))
 const BookingHistory = lazy(() => import('../features/user/bookings/BookingHistory'))
 const BookingDetails = lazy(() => import('../features/user/bookings/BookingDetails'))
+const Feedback = lazy(() => import('../features/user/bookings/Feedback'))
 const Notifications = lazy(() => import('../shared/inbox/Notifications'))
 const Profile = lazy(() => import('../features/user/profile/Profile'))
 const DigitalReceipt = lazy(() => import('../features/user/bookings/DigitalReceipt'))
@@ -98,6 +99,7 @@ export default function AppRoutes() {
 				<Route path="/bookings" element={resolveBookingsElementByRole()} />
 				<Route path="/bookings/:bookingId" element={<BookingDetails />} />
 				<Route path="/bookings/:bookingId/receipt" element={<DigitalReceipt />} />
+				<Route path="/feedback" element={<Feedback />} />
 				<Route path="/notifications" element={<NotificationsRoleRedirect />} />
 				<Route path="/user/notifications" element={<Notifications />} />
 				<Route path="/staff/notifications" element={<Notifications />} />
