@@ -99,7 +99,7 @@ export default function AppRoutes() {
 				<Route path="/bookings" element={resolveBookingsElementByRole()} />
 				<Route path="/bookings/:bookingId" element={<BookingDetails />} />
 				<Route path="/bookings/:bookingId/receipt" element={<DigitalReceipt />} />
-				<Route path="/feedback" element={<Feedback />} />
+				<Route path="/feedback/:bookingId" element={<Feedback />} />
 				<Route path="/notifications" element={<NotificationsRoleRedirect />} />
 				<Route path="/user/notifications" element={<Notifications />} />
 				<Route path="/staff/notifications" element={<Notifications />} />

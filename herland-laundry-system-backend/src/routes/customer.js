@@ -280,6 +280,7 @@ function normalizeBooking(b) {
         status: b.status || 'pending',
         notes: b.notes || '',
         created_at: b.created_at || null,
+        rider_id: b.rider_id || null,
     };
 }
 
@@ -346,7 +347,14 @@ router.get('/my-bookings/:id', requireAuth, async (req, res) => {
             return res.status(404).json({ error: 'Booking not found' });
         }
 
-        res.json(normalizeBooking(booking));
+        const { data: customerFeedback } = await supabase.from('customer_feedback').select('*').eq('booking_id', booking.id).maybeSingle();
+        const { data: riderFeedback } = await supabase.from('rider_feedback').select('*').eq('booking_id', booking.id).maybeSingle();
+
+        const responseData = normalizeBooking(booking);
+        responseData.customer_feedback = customerFeedback || null;
+        responseData.rider_feedback = riderFeedback || null;
+
+        res.json(responseData);
     } catch (error) {
         console.error('Fetch Single Booking Error:', error.message);
         res.status(500).json({ error: 'Failed to fetch booking' });
@@ -635,21 +643,21 @@ router.patch('/my-bookings/:id/update', requireAuth, async (req, res) => {
 // ─── Submit Feedback ──────────────────────────────────────────────────────────
 router.patch('/my-bookings/:id/feedback', requireAuth, async (req, res) => {
     const { id } = req.params;
-    const { rating, comment } = req.body;
+    const { customer_feedback, rider_feedback } = req.body;
 
-    if (!rating || rating < 1 || rating > 5) {
-        return res.status(400).json({ error: 'Valid rating (1-5) is required' });
+    if (!customer_feedback || !customer_feedback.rating || customer_feedback.rating < 1 || customer_feedback.rating > 5) {
+        return res.status(400).json({ error: 'Valid laundry rating (1-5) is required' });
+    }
+
+    if (!rider_feedback || !rider_feedback.rating || rider_feedback.rating < 1 || rider_feedback.rating > 5) {
+        return res.status(400).json({ error: 'Valid rider rating (1-5) is required' });
     }
 
     try {
         // Verify booking belongs to user and is completed
-        const { data: booking, error: fetchError } = await supabase
-            .from('bookings')
-            .select('user_id, status, feedback')
-            .eq('id', id)
-            .single();
+        const booking = await getBookingByIdOrRef(id, req.user.id);
 
-        if (fetchError || !booking) {
+        if (!booking) {
             return res.status(404).json({ error: 'Booking not found' });
         }
 
@@ -657,27 +665,44 @@ router.patch('/my-bookings/:id/feedback', requireAuth, async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 
-        const terminalStatuses = ['delivered', 'completed', 'Booking Completed'];
-        if (!terminalStatuses.includes(booking.status)) {
+        const terminalStatuses = ['delivered', 'completed', 'booking completed'];
+        if (!terminalStatuses.includes((booking.status || '').toLowerCase())) {
             return res.status(400).json({ error: 'Feedback can only be provided for completed bookings' });
         }
 
-        const feedbackData = {
-            rating,
-            comment,
-            submitted_at: new Date().toISOString()
+        // Check if feedback already exists to prevent duplicate
+        const { data: existingCustomerFeedback } = await supabase.from('customer_feedback').select('id').eq('booking_id', booking.id).maybeSingle();
+        if (existingCustomerFeedback) {
+             return res.status(400).json({ error: 'Feedback has already been submitted for this booking.' });
+        }
+
+        // Insert into customer_feedback
+        const customerFeedbackPayload = {
+            booking_id: booking.id,
+            user_id: req.user.id,
+            rating: customer_feedback.rating,
+            review_tags: customer_feedback.review_tags || [],
+            review_comment: customer_feedback.review_comment || null,
         };
 
-        const { data, error } = await supabase
-            .from('bookings')
-            .update({ feedback: feedbackData })
-            .eq('id', id)
-            .select()
-            .single();
+        const { error: cfError } = await supabase.from('customer_feedback').insert([customerFeedbackPayload]);
+        if (cfError) throw cfError;
 
-        if (error) throw error;
+        // Insert into rider_feedback
+        const riderId = booking.rider_id || rider_feedback.rider_id;
+        if (riderId) {
+            const riderFeedbackPayload = {
+                booking_id: booking.id,
+                rider_id: riderId,
+                rating: rider_feedback.rating,
+                review_tags: rider_feedback.review_tags || []
+            };
 
-        res.json({ message: 'Feedback submitted successfully', booking: data });
+            const { error: rfError } = await supabase.from('rider_feedback').insert([riderFeedbackPayload]);
+            if (rfError) throw rfError;
+        }
+
+        res.json({ message: 'Feedback submitted successfully' });
     } catch (error) {
         console.error('Submit Feedback Error:', error.message);
         res.status(500).json({ error: 'Internal server error' });

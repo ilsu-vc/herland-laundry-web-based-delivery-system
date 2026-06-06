@@ -17,9 +17,6 @@ export default function BookingDetails() {
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [submittingFeedback, setSubmittingFeedback] = useState(false);
-  const [selectedFeedback, setSelectedFeedback] = useState(0);
-  const [feedbackComment, setFeedbackComment] = useState("");
   const [editTimeLeft, setEditTimeLeft] = useState(null); // seconds remaining, null = not computed yet
   const editWarningShown = useRef(false);
 
@@ -143,48 +140,7 @@ export default function BookingDetails() {
     navigate(`/book?edit=${bookingId}`);
   };
 
-  const handleSubmitFeedback = async () => {
-    if (selectedFeedback === 0) {
-      showToast("Please select feedback.", "error");
-      return;
-    }
 
-    try {
-      setSubmittingFeedback(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        showToast("Session expired. Please log in again.", "error");
-        return;
-      }
-
-      const response = await fetch(`${API_BASE}/my-bookings/${bookingId}/feedback`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          rating: selectedFeedback,
-          comment: feedbackComment,
-        }),
-      });
-
-      if (response.ok) {
-        showToast("Feedback submitted successfully. Thank you!", "success");
-        fetchBooking();
-      } else {
-        const data = await response.json();
-        showToast(data.error || "Failed to submit feedback.", "error");
-      }
-    } catch (err) {
-      console.error("Error submitting feedback:", err);
-      showToast("An error occurred. Please try again.", "error");
-    } finally {
-      setSubmittingFeedback(false);
-    }
-  };
 
   const buildFullTimeline = (bk) => {
     if (!bk) return [];
@@ -560,35 +516,19 @@ export default function BookingDetails() {
             )}
 
             {/* Feedback Section */}
-            {(booking?.status?.toLowerCase() === "delivered" || booking?.status?.toLowerCase() === "completed" || booking?.status === "Booking Completed") && (
+            {(booking?.status?.toLowerCase() === "delivered" || booking?.status?.toLowerCase() === "completed" || booking?.status?.toLowerCase() === "booking completed") && (
               <div className="rounded-2xl border border-[#3878c2]/20 bg-white p-6 shadow-sm">
                 <h3 className="mb-4 text-lg font-semibold text-[#3878c2]">
                   Your Experience
                 </h3>
 
-                {booking.feedback ? (
-                  <div className="space-y-2">
-                    <div className="flex gap-1">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <svg
-                          key={star}
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill={star <= booking.feedback.rating ? "#facc15" : "#e5e7eb"}
-                          className="size-5"
-                        >
-                          <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
-                        </svg>
-                      ))}
-                    </div>
-                    {booking.feedback.comment && (
-                      <p className="text-sm text-[#374151] italic">
-                        "{booking.feedback.comment}"
-                      </p>
-                    )}
-                    <p className="text-[10px] text-[#b4b4b4] uppercase font-bold mt-1">
-                      Submitted on {formatDate(booking.feedback.submitted_at)}
-                    </p>
+                {(booking.customer_feedback || booking.rider_feedback) ? (
+                  <div className="space-y-4 text-center py-6">
+                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-[#4bad40] mb-2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                     </svg>
+                    <p className="text-lg font-semibold text-[#374151]">Feedback Submitted</p>
+                    <p className="text-sm text-[#b4b4b4]">Thank you for sharing your experience with us!</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -596,39 +536,11 @@ export default function BookingDetails() {
                       How was our service? Your feedback helps us improve!
                     </p>
 
-                    <div className="flex gap-2">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => setSelectedFeedback(star)}
-                          className="focus:outline-none transition-transform hover:scale-110"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill={star <= selectedFeedback ? "#facc15" : "#e5e7eb"}
-                            className="size-8"
-                          >
-                            <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      ))}
-                    </div>
-
-                    <textarea
-                      value={feedbackComment}
-                      onChange={(e) => setFeedbackComment(e.target.value)}
-                      placeholder="Share your thoughts (optional)..."
-                      className="w-full rounded-xl border border-[#d9e8fb] p-3 text-sm focus:border-[#3878c2] focus:ring-1 focus:ring-[#3878c2] outline-none min-h-[100px]"
-                    />
-
                     <button
-                      onClick={handleSubmitFeedback}
-                      disabled={submittingFeedback || selectedFeedback === 0}
-                      className="w-full rounded-xl bg-[#3878c2] py-3 text-sm font-bold text-white shadow-md hover:bg-[#2d62a3] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      onClick={() => navigate(`/feedback/${bookingId}`)}
+                      className="w-full rounded-xl bg-[#3878c2] py-3 text-sm font-bold text-white shadow-md hover:bg-[#2d62a3] transition-all"
                     >
-                      {submittingFeedback ? "Submitting..." : "Submit Feedback"}
+                      Submit Feedback
                     </button>
                   </div>
                 )}

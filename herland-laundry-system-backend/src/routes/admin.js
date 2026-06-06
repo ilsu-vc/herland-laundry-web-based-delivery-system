@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../config/supabase');
 const { verifyRole } = require('../middleware/auth');
+const notificationService = require('../services/notificationService');
 
 // Route: Get total revenue and booking counts
 router.get('/dashboard-stats', verifyRole('Admin'), async (req, res) => {
@@ -169,7 +170,7 @@ router.get('/bookings', verifyRole(['Admin', 'Staff']), async (req, res) => {
     try {
         const { data: bookings, error } = await supabase
             .from('bookings')
-            .select('*')
+            .select('*, customer_feedback(*), rider_feedback(*)')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -208,6 +209,8 @@ router.get('/bookings', verifyRole(['Admin', 'Staff']), async (req, res) => {
             riderId: b.rider_id || null,
             riderName: b.rider_id ? (profilesMap[b.rider_id] || 'Selected Rider') : null,
             notes: b.notes || '',
+            customerFeedback: Array.isArray(b.customer_feedback) ? b.customer_feedback[0] : b.customer_feedback || null,
+            riderFeedback: Array.isArray(b.rider_feedback) ? b.rider_feedback[0] : b.rider_feedback || null,
         }));
 
         res.json(mapped);
@@ -254,15 +257,15 @@ router.put('/bookings/:id/status', verifyRole(['Admin', 'Staff']), async (req, r
             updateData.timeline = timeline;
         }
 
+        // Fetch current booking data
+        const { data: current, error: fetchError } = await supabase
+            .from('bookings')
+            .select('user_id, payment_details, reference_number')
+            .eq('id', id)
+            .single();
+
         // Also update payment_details status for payment-related actions
         if (status === 'Payment Confirmed' || status === 'Payment Flagged') {
-            // Fetch current payment_details to merge
-            const { data: current, error: fetchError } = await supabase
-                .from('bookings')
-                .select('payment_details')
-                .eq('id', id)
-                .single();
-
             if (!fetchError && current) {
                 const currentPayment = current.payment_details || {};
                 updateData.payment_details = {
@@ -283,6 +286,19 @@ router.put('/bookings/:id/status', verifyRole(['Admin', 'Staff']), async (req, r
         }
 
         res.json({ message: 'Booking status updated successfully' });
+
+        // Trigger notification
+        if (current && current.user_id) {
+            let eventType = 'UPDATED';
+            if (status === 'Booking Completed' || status === 'delivered') eventType = 'COMPLETED';
+            else if (status === 'Booking Cancelled') eventType = 'CANCELLED';
+            else if (status === 'Booking Accepted') eventType = 'BOOKING_ACCEPTED';
+            else if (status === 'In Progress') eventType = 'WASHING';
+            else if (status === 'Ready for Pick-up') eventType = 'READY';
+            else if (status === 'Out for Delivery') eventType = 'DELIVERY';
+
+            notificationService.notify(current.user_id, eventType, current.reference_number || id);
+        }
     } catch (error) {
         console.error('Update Booking Status Error:', error.message);
         res.status(500).json({ error: `Failed to update booking status: ${error.message}` });

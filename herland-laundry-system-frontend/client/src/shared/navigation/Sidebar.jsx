@@ -17,6 +17,7 @@ export default function Sidebar({
     const navItems = getRoleNavigation(location.pathname);
     const [userProfile, setUserProfile] = useState({ name: 'User', avatar: null });
     const [session, setSession] = useState(null);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     const fetchUserProfile = useCallback(async () => {
         try {
@@ -64,6 +65,25 @@ export default function Sidebar({
             window.removeEventListener('profileUpdated', handleProfileUpdate);
         };
     }, [fetchUserProfile]);
+
+    useEffect(() => {
+        const fetchUnreadCount = async () => {
+            if (!session?.access_token) return;
+            try {
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/notifications`, {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setUnreadCount(data.filter(n => !n.is_read).length);
+                }
+            } catch (err) {}
+        };
+
+        fetchUnreadCount();
+        window.addEventListener('notificationsUpdated', fetchUnreadCount);
+        return () => window.removeEventListener('notificationsUpdated', fetchUnreadCount);
+    }, [session, location.pathname]);
 
     const handleLogout = async () => {
         try {
@@ -161,6 +181,11 @@ export default function Sidebar({
                                             </span>
                                         ) : null}
                                         <span className="whitespace-nowrap">{item.label}</span>
+                                        {item.label === 'Notifications' && unreadCount > 0 && (
+                                            <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-[#3878c2] text-[10px] font-bold text-white">
+                                                {unreadCount > 99 ? '99+' : unreadCount}
+                                            </span>
+                                        )}
                                     </button>
                                 );
                             })}
@@ -221,6 +246,11 @@ export default function Sidebar({
                         >
                             {item.icon ? <span className="text-[#3878c2]">{item.icon}</span> : null}
                             <span>{item.label}</span>
+                            {item.label === 'Notifications' && unreadCount > 0 && (
+                                <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-[#3878c2] text-[10px] font-bold text-white">
+                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
+                            )}
                         </button>
                     ))}
 

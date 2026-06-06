@@ -1040,6 +1040,80 @@ export default function ManageBookings() {
                   <h3 className="mb-4 text-sm font-semibold text-[#3878c2]">Booking Progress</h3>
                   <VerticalStepper steps={selectedBooking.timeline} />
                 </section>
+
+                {(['Booking Completed', 'delivered', 'completed'].includes(getCurrentStatus(selectedBooking)) || selectedBooking.customerFeedback || selectedBooking.riderFeedback) && (
+                  <section className="rounded-2xl border border-[#b4b4b4] p-4">
+                    <h3 className="mb-4 text-sm font-semibold text-[#3878c2]">Customer Feedback</h3>
+                    {(!selectedBooking.customerFeedback && !selectedBooking.riderFeedback) ? (
+                      <p className="text-sm text-[#b4b4b4] italic">No feedback submitted yet.</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Customer Laundry Feedback */}
+                        {selectedBooking.customerFeedback && (
+                          <div className="rounded-lg bg-gray-50 p-4 border border-gray-100">
+                            <p className="text-xs font-semibold text-[#374151] mb-2 uppercase">Laundry Service</p>
+                            <div className="flex gap-1 mb-2">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <svg
+                                  key={star}
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  viewBox="0 0 24 24"
+                                  fill={star <= selectedBooking.customerFeedback.rating ? "#facc15" : "#e5e7eb"}
+                                  className="size-5"
+                                >
+                                  <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
+                                </svg>
+                              ))}
+                            </div>
+                            {selectedBooking.customerFeedback.review_tags && selectedBooking.customerFeedback.review_tags.length > 0 && (
+                               <div className="flex flex-wrap gap-2 mb-2">
+                                  {selectedBooking.customerFeedback.review_tags.map(tag => (
+                                      <span key={tag} className="bg-[#eaf3fc] text-[#3878c2] px-2 py-1 rounded-md text-[10px] font-bold">
+                                          {tag}
+                                      </span>
+                                  ))}
+                               </div>
+                            )}
+                            {selectedBooking.customerFeedback.review_comment && (
+                               <p className="text-sm text-[#374151] mt-2 italic bg-white p-3 rounded border border-gray-200">
+                                   "{selectedBooking.customerFeedback.review_comment}"
+                               </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Rider Feedback */}
+                        {selectedBooking.riderFeedback && (
+                          <div className="rounded-lg bg-gray-50 p-4 border border-gray-100">
+                            <p className="text-xs font-semibold text-[#374151] mb-2 uppercase">Rider Rating</p>
+                            <div className="flex gap-1 mb-2">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <svg
+                                  key={star}
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  viewBox="0 0 24 24"
+                                  fill={star <= selectedBooking.riderFeedback.rating ? "#facc15" : "#e5e7eb"}
+                                  className="size-5"
+                                >
+                                  <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
+                                </svg>
+                              ))}
+                            </div>
+                            {selectedBooking.riderFeedback.review_tags && selectedBooking.riderFeedback.review_tags.length > 0 && (
+                               <div className="flex flex-wrap gap-2">
+                                  {selectedBooking.riderFeedback.review_tags.map(tag => (
+                                      <span key={tag} className="bg-[#eaf3fc] text-[#3878c2] px-2 py-1 rounded-md text-[10px] font-bold">
+                                          {tag}
+                                      </span>
+                                  ))}
+                               </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                )}
               </div>
             </div>
           )}

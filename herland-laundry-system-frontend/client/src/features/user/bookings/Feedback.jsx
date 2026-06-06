@@ -1,5 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { supabase } from "../../../lib/supabase";
+import { useToast } from "../../../shared/components/Toast";
 
+const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/customer`;
 const C = {
   blue: "#3878C2",
   sky: "#63BCE6",
@@ -187,29 +191,15 @@ function TagSection({
 }
 
 export default function RatingsPage() {
-  /*
-    Frontend sample data only.
-    Later, replace this with actual booking data from your page/state.
-  */
-  const booking = {
-    id: 1,
-    reference_number: "HL-1234-5678",
-    service_type: "Full Service Laundry",
-    service_details: {
-      service: "Wash, Dry, Fold",
-      addons: "None",
-    },
-    rider_id: "rider-uuid-here",
-    rider_name: "John Dela Cruz",
-  };
+  const { bookingId } = useParams();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
 
-  /*
-    Frontend sample data only.
-    Later, replace this with the logged-in Supabase user.
-  */
-  const user = {
-    id: "customer-user-uuid-here",
-  };
+  const [booking, setBooking] = useState(null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const [customerRating, setCustomerRating] = useState(0);
   const [customerReviewTags, setCustomerReviewTags] = useState([]);
@@ -221,12 +211,99 @@ export default function RatingsPage() {
   const [commentFocused, setCommentFocused] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  const fetchBooking = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        setError("Please log in to submit feedback.");
+        setLoading(false);
+        return;
+      }
+
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      setUser(currentUser);
+
+      const response = await fetch(
+        `${API_BASE}/my-bookings/${encodeURIComponent(bookingId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Validation 1: Booking is delivered/completed
+        const terminalStatuses = ['delivered', 'completed', 'booking completed'];
+        if (!terminalStatuses.includes((data.status || '').toLowerCase())) {
+          setError("Feedback can only be provided for completed bookings.");
+          setLoading(false);
+          return;
+        }
+
+        // Validation 2: Feedback doesn't already exist
+        if (data.customer_feedback || data.rider_feedback) {
+          setError("Feedback has already been submitted for this booking.");
+          setLoading(false);
+          return;
+        }
+
+        setBooking(data);
+      } else if (response.status === 404) {
+        setError("Booking not found.");
+      } else {
+        setError("Could not load booking details.");
+      }
+    } catch (err) {
+      console.error("Error fetching booking:", err);
+      setError("Could not connect to the server.");
+    } finally {
+      setLoading(false);
+    }
+  }, [bookingId]);
+
+  useEffect(() => {
+    fetchBooking();
+  }, [fetchBooking]);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen px-7 py-12 flex items-center justify-center" style={{ background: C.skyFaint }}>
+        <p className="text-lg font-medium" style={{ color: C.blueMuted }}>Loading...</p>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="min-h-screen px-7 py-12 flex items-center justify-center" style={{ background: C.skyFaint }}>
+        <div style={cardStyle} className="p-8 text-center max-w-md w-full">
+          <p className="text-lg font-bold mb-6 text-[#e55353]">{error}</p>
+          <button
+            onClick={() => navigate(`/bookings/${bookingId}`)}
+            className="rounded-xl px-8 py-3 text-sm font-bold transition-all duration-150"
+            style={{
+              background: C.blue,
+              color: C.white,
+            }}
+          >
+            Return to booking
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   const bookingRows = [
-    { label: "Reference No.", value: booking.reference_number },
-    { label: "Service Type", value: booking.service_type },
-    { label: "Services", value: booking.service_details?.service || "N/A" },
-    { label: "Add-ons", value: booking.service_details?.addons || "None" },
-    { label: "Rider Name", value: booking.rider_name || "N/A" },
+    { label: "Reference No.", value: booking?.id || bookingId },
+    { label: "Service Type", value: booking?.customerName || booking?.service_type || "Laundry Service" },
+    { label: "Rider Name", value: booking?.riderName || booking?.rider_name || (booking?.rider_id ? "Assigned" : "N/A") },
   ];
 
   const handleCustomerRating = (value) => {
@@ -251,32 +328,54 @@ export default function RatingsPage() {
 
   const canSubmit = customerRating > 0 && riderRating > 0;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) return;
 
-    const customer_feedback = {
-      booking_id: booking.id,
-      user_id: user.id,
-      rating: customerRating,
-      review_tags: customerReviewTags,
-      review_comment: customerReviewComment.trim() || null,
-    };
+    try {
+      setSubmitting(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-    const rider_feedback = {
-      booking_id: booking.id,
-      rider_id: booking.rider_id,
-      rating: riderRating,
-      review_tags: riderReviewTags,
-    };
+      if (!token) {
+        showToast("Session expired. Please log in again.", "error");
+        return;
+      }
 
-    /*
-      Frontend-only.
-      Later, these are the payloads you can send to Supabase.
-    */
-    console.log("customer_feedback:", customer_feedback);
-    console.log("rider_feedback:", rider_feedback);
+      const payload = {
+        customer_feedback: {
+          rating: customerRating,
+          review_tags: customerReviewTags,
+          review_comment: customerReviewComment.trim() || null,
+        },
+        rider_feedback: {
+          rider_id: booking.rider_id,
+          rating: riderRating,
+          review_tags: riderReviewTags,
+        }
+      };
 
-    setSubmitted(true);
+      const response = await fetch(`${API_BASE}/my-bookings/${encodeURIComponent(bookingId)}/feedback`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        showToast("Feedback submitted successfully. Thank you!", "success");
+        setSubmitted(true);
+      } else {
+        const data = await response.json();
+        showToast(data.error || "Failed to submit feedback.", "error");
+      }
+    } catch (err) {
+      console.error("Error submitting feedback:", err);
+      showToast("An error occurred. Please try again.", "error");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const resetForm = () => {
@@ -303,6 +402,17 @@ export default function RatingsPage() {
         {!submitted ? (
           <>
             <header className="mb-5 sm:mb-6">
+              <button
+                type="button"
+                onClick={() => navigate(`/bookings/${bookingId}`)}
+                className="mb-4 inline-flex items-center gap-2 text-sm font-semibold transition-colors hover:text-[#63bce6]"
+                style={{ color: C.blue }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                </svg>
+                Return to booking
+              </button>
               <h1
                 className="text-2xl font-extrabold tracking-tight sm:text-3xl"
                 style={{ color: C.blue }}
@@ -458,8 +568,21 @@ export default function RatingsPage() {
               </div>
             </section>
 
-            <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
-              <p className="text-xs sm:text-sm" style={{ color: C.blueMuted }}>
+            <div className="mt-4 flex flex-col items-center justify-between gap-4 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => navigate(`/bookings/${bookingId}`)}
+                className="w-full sm:w-auto rounded-xl px-6 py-3 text-sm font-bold transition-all duration-150 border-2"
+                style={{
+                  borderColor: C.blue,
+                  color: C.blue,
+                  background: 'transparent'
+                }}
+              >
+                Return to booking
+              </button>
+
+              <p className="text-xs sm:text-sm text-center flex-1" style={{ color: C.blueMuted }}>
                 {!canSubmit
                   ? "Please select both laundry and rider ratings to submit"
                   : "Tags and comments are optional"}
@@ -467,19 +590,19 @@ export default function RatingsPage() {
 
               <button
                 type="button"
-                disabled={!canSubmit}
+                disabled={!canSubmit || submitting}
                 onClick={handleSubmit}
                 className="w-full rounded-xl px-8 py-3 text-sm font-bold transition-all duration-150 sm:w-auto"
                 style={{
                   background: canSubmit ? C.green : "rgba(99,188,230,0.18)",
                   color: canSubmit ? C.white : "rgba(99,188,230,0.65)",
-                  cursor: !canSubmit ? "not-allowed" : "pointer",
+                  cursor: !canSubmit || submitting ? "not-allowed" : "pointer",
                   boxShadow: canSubmit
                     ? "0 4px 14px rgba(75,173,64,0.28)"
                     : "none",
                 }}
               >
-                Submit Feedback
+                {submitting ? "Submitting..." : "Submit Feedback"}
               </button>
             </div>
           </>
@@ -498,7 +621,7 @@ export default function RatingsPage() {
 
               <button
                 type="button"
-                onClick={resetForm}
+                onClick={() => navigate(`/bookings/${bookingId}`)}
                 className="rounded-xl px-8 py-3 text-sm font-bold transition-all duration-150"
                 style={{
                   background: C.green,
@@ -506,7 +629,7 @@ export default function RatingsPage() {
                   boxShadow: "0 4px 14px rgba(75,173,64,0.28)",
                 }}
               >
-                Back to bookings
+                Return to booking
               </button>
             </div>
           </section>

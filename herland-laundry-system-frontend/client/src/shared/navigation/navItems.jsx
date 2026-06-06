@@ -260,10 +260,10 @@ const staffNavItems = [
 const adminNavItems = [
   { label: "Home", path: "/admin", icon: HOME_ICON, requiresAuth: true },
   { label: "Manage Bookings", path: "/admin/manage-bookings", icon: BOOKINGS_ICON, requiresAuth: true },
-  { label: "Manage Employees", path: "/admin/manage-employees", icon: USER_ICON, requiresAuth: true },
   { label: "Manage Admins", path: "/admin/manage-admins", icon: USER_ICON, requiresAuth: true },
-  { label: "Manage Services", path: "/admin/manage-services", icon: MANAGE_SERVICES_ICON, requiresAuth: true },
+  { label: "Manage Employees", path: "/admin/manage-employees", icon: USER_ICON, requiresAuth: true },
   { label: "Manage Users", path: "/admin/manage-users", icon: USER_ICON, requiresAuth: true },
+  { label: "Manage Services", path: "/admin/manage-services", icon: MANAGE_SERVICES_ICON, requiresAuth: true },
   { label: "Reports", path: "/admin/reports", icon: REPORTS_ICON, requiresAuth: true },
   { label: "Notifications", path: "/admin/notifications", icon: NOTIFICATIONS_ICON, requiresAuth: true },
   { label: "My Profile", path: "/profile", icon: USER_ICON, requiresAuth: true },
