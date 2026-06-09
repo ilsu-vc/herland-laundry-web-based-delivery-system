@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLayout } from "../../app/LayoutContext";
 import { usePermissions } from "../../shared/permissions/UsePermissions";
@@ -43,7 +43,6 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   const clearBookingState = () => {
     localStorage.removeItem('bookingStep');
     localStorage.removeItem('bookingServices');
-    localStorage.removeItem('bookingAddons');
     localStorage.removeItem('bookingWeight');
     localStorage.removeItem('bookingPaymentMethod');
     localStorage.removeItem('bookingNumberOfBags');
@@ -52,6 +51,8 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
     localStorage.removeItem('bookingCollectionInfo');
     localStorage.removeItem('bookingDeliveryInfo');
     localStorage.removeItem('bookingCustomerLocation');
+    localStorage.removeItem('bookingSelectedLoad');
+    localStorage.removeItem('bookingLoadQuantities');
   };
 
   // Auth Check
@@ -67,14 +68,12 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   }, [navigate, showToast]);
 
   const [services, setServices] = useState(() => getLocalItem('bookingServices', {}));
-  const [addons, setAddons] = useState(() => getLocalItem('bookingAddons', {}));
   const [weight, setWeight] = useState(() => {
     if (isEditMode) return 0;
     const saved = localStorage.getItem('bookingWeight');
     return saved ? parseFloat(saved) : 0;
   });
   const [availableServices, setAvailableServices] = useState([]);
-  const [availableAddons, setAvailableAddons] = useState([]);
   const [loadingServices, setLoadingServices] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState(() => {
     if (isEditMode) return "gcash";
@@ -96,8 +95,8 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   const { setHideBottomNav } = useLayout();
   const { requestLocationPermission } = usePermissions();
   const [collectionInfo, setCollectionInfo] = useState(() => getLocalItem('bookingCollectionInfo', {
-    option: "dropOffPickUpLater",
-    optionLabel: "Drop-off & Pick up later",
+    option: "pickedUpDelivered",
+    optionLabel: "Pickup & Delivery",
     date: "",
     time: "",
   }));
@@ -116,7 +115,6 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
     if (!isEditMode) {
       localStorage.setItem('bookingStep', step.toString());
       localStorage.setItem('bookingServices', JSON.stringify(services));
-      localStorage.setItem('bookingAddons', JSON.stringify(addons));
       localStorage.setItem('bookingWeight', weight.toString());
       localStorage.setItem('bookingPaymentMethod', paymentMethod);
       localStorage.setItem('bookingNumberOfBags', numberOfBags.toString());
@@ -126,7 +124,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
       localStorage.setItem('bookingDeliveryInfo', JSON.stringify(deliveryInfo));
       localStorage.setItem('bookingCustomerLocation', JSON.stringify(customerLocation));
     }
-  }, [step, services, addons, weight, paymentMethod, numberOfBags, bagDescription, notes, collectionInfo, deliveryInfo, customerLocation, isEditMode]);
+  }, [step, services, weight, paymentMethod, numberOfBags, bagDescription, notes, collectionInfo, deliveryInfo, customerLocation, isEditMode]);
   const [saveHomeAddress, setSaveHomeAddress] = useState(true);
 
   const { isLoaded: isMapLoaded } = useJsApiLoader({
@@ -135,7 +133,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
-  // Fetch available services and add-ons from backend
+  // Fetch available services from backend
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
@@ -144,7 +142,6 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
         if (response.ok) {
           const data = await response.json();
           setAvailableServices(data.services || []);
-          setAvailableAddons(data.addOns || []);
           
           // Initialize state if not in edit mode
           if (!isEditMode) {
@@ -157,14 +154,6 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
               return newServices;
             });
 
-            setAddons(prev => {
-              const newAddons = { ...prev };
-              data.addOns.forEach(a => {
-                const key = a.name.toLowerCase();
-                if (newAddons[key] === undefined) newAddons[key] = 0;
-              });
-              return newAddons;
-            });
           }
         }
       } catch (err) {
@@ -236,27 +225,34 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
             });
             setServices(mergedServices);
 
-            const mergedAddons = {};
-            availableAddons.forEach(a => {
-              const key = a.name.toLowerCase();
-              mergedAddons[key] = data.serviceDetails.addons?.[key] || 0;
-            });
-            setAddons(mergedAddons);
 
             setWeight(data.serviceDetails.weight || 0);
             setNumberOfBags(data.serviceDetails.numberOfBags || 1);
             setBagDescription(data.serviceDetails.bagDescription || "");
             setPaymentMethod(data.paymentDetails.method === "GCash" ? "gcash" : "cash");
             setNotes(data.notes || "");
+
+            const storedSelectedLoads = Array.isArray(data.serviceDetails.selectedLoads)
+              ? data.serviceDetails.selectedLoads
+              : ['regular'];
+            const storedLoadQuantities = data.serviceDetails.loadQuantities || {
+              regular: data.serviceDetails.numberOfBags || 1,
+              heavy: 1,
+              perPiece: 1,
+            };
+            localStorage.setItem('bookingSelectedLoad', JSON.stringify(storedSelectedLoads));
+            localStorage.setItem('bookingLoadQuantities', JSON.stringify(storedLoadQuantities));
             setCollectionInfo({
-              option: data.collectionDetails.option,
-              optionLabel: data.collectionDetails.optionLabel,
+              option: "pickedUpDelivered",
+              optionLabel: "Pickup & Delivery",
               date: data.collectionDetails.collectionDate,
               time: data.collectionDetails.collectionTime,
-            });
+              collectionSlot: data.collectionDetails.collectionSlot || getSlotIdByValue(data.collectionDetails.collectionTime),
+            });            
             setDeliveryInfo({
               date: data.collectionDetails.deliveryDate,
               time: data.collectionDetails.deliveryTime,
+              deliverySlot: data.collectionDetails.deliverySlot || getSlotIdByValue(data.collectionDetails.deliveryTime),
             });
             if (data.collectionDetails.lat && data.collectionDetails.lng) {
               setCustomerLocation({
@@ -275,10 +271,10 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   }, [isEditMode, editId]);
 
   const steps = [
-    "Select Services",
-    "Collection & Delivery",
+    "Laundry Details",
+    "Schedule",
     "Address Details",
-    "Review Booking",
+    "Review & Confirm",
   ];
 
   useEffect(() => {
@@ -289,26 +285,11 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
     };
   }, [step, setHideBottomNav]);
 
-  useEffect(() => {
-    if (
-      collectionInfo.option !== "dropOffPickUpLater" &&
-      paymentMethod === "cash"
-    ) {
-      setPaymentMethod("gcash");
-    }
-  }, [collectionInfo.option, paymentMethod]);
-
   const calculateTotalEstimatedHours = () => {
     let total = 0;
     availableServices.forEach(s => {
       if (services[s.name.toLowerCase()]) {
         total += Number(s.estimatedHours) || 0;
-      }
-    });
-    availableAddons.forEach(a => {
-      const qty = Number(addons[a.name.toLowerCase()]) || 0;
-      if (qty > 0) {
-        total += (Number(a.estimatedHours) || 0) * qty;
       }
     });
     return total;
@@ -335,7 +316,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   };
 
   return (
-    <div className="min-h-screen bg-white px-4 py-6 sm:px-3 md:px-2">
+    <div className="min-h-screen px-4 py-6 sm:px-3 md:px-2" style={{ backgroundColor: "#EFF8FC" }}>
       {inlineEditId && (
         <div className="max-w-none lg:max-w-7xl mx-auto px-4 py-3 border-b border-gray-200 flex items-center justify-between mb-4 bg-gray-50 rounded-lg">
           <div className="flex items-center gap-2 text-[#3878c2]">
@@ -353,23 +334,35 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
           <span className="text-xs text-gray-500 font-medium">Editing Booking: {inlineEditId}</span>
         </div>
       )}
+
       {/* Stepper Container */}
-      <div className="max-w-none lg:max-w-7xl mx-auto mb-4 pt-2 overflow-visible">
+      <div className="max-w-3xl mx-auto mb-4 pt-2 overflow-visible px-4 sm:px-6">
         <style>
           {`
             .steps .step:first-child::before {
               background-color: transparent !important;
             }
+
             .steps .step::before {
               background-color: var(--step-line-color, #b4b4b4);
             }
+
             .steps .step {
               color: var(--step-label-color, #b4b4b4);
+              position: relative;
             }
+
             .steps .step::after {
               background-color: var(--step-circle-color, #b4b4b4);
               border-color: var(--step-circle-color, #b4b4b4);
+              position: relative;
+              z-index: 2;
             }
+
+            .steps .step.current-step::after {
+              box-shadow: 0 0 0 7px rgba(99, 188, 230, 0.60);
+            }
+
             .date-input::-webkit-calendar-picker-indicator,
             .time-input::-webkit-calendar-picker-indicator {
               opacity: 0;
@@ -381,11 +374,13 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
             }
           `}
         </style>
+
         <ul className="steps w-full overflow-visible">
           {steps.map((label, index) => {
             const stepNumber = index + 1;
             const isCompleted = step > stepNumber;
             const isCurrent = step === stepNumber;
+
             const circleColor = isCompleted || isCurrent ? "#3878c2" : "#b4b4b4";
             const lineColor = isCompleted || isCurrent ? "#3878c2" : "#b4b4b4";
             const labelColor = isCompleted || isCurrent ? "#3878c2" : "#b4b4b4";
@@ -393,14 +388,16 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
             return (
               <li
                 key={label}
-                className="step"
+                className={`step ${isCurrent ? "current-step" : ""}`}
                 style={{
                   "--step-circle-color": circleColor,
                   "--step-line-color": lineColor,
                   "--step-label-color": labelColor,
                 }}
               >
-                <span className="font-semibold text-[0.6rem] sm:text-[0.65rem] md:text-xs">{label}</span>
+                <span className="font-semibold text-[0.6rem] sm:text-[0.65rem] md:text-xs">
+                  {label}
+                </span>
               </li>
             );
           })}
@@ -408,30 +405,27 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
       </div>
 
       {/* Step Content */}
-      <div className="max-w-none lg:max-w-7xl mx-auto px-0 sm:px-1">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
         {step === 1 && (
           <StepSelectServices
             onNext={() => handleStepChange(2)}
             availableServices={availableServices}
-            availableAddons={availableAddons}
             loading={loadingServices}
             services={services}
             setServices={setServices}
-            addons={addons}
-            setAddons={setAddons}
             weight={weight}
             setWeight={setWeight}
-            collectionInfo={collectionInfo}
             paymentMethod={paymentMethod}
             setPaymentMethod={setPaymentMethod}
             numberOfBags={numberOfBags}
             setNumberOfBags={setNumberOfBags}
             bagDescription={bagDescription}
             setBagDescription={setBagDescription}
+            isEditMode={isEditMode}
           />
         )}
         {step === 2 && (
-          <StepCollection
+          <StepSchedule
             onBack={() => setStep(1)}
             onNext={() => handleStepChange(3)}
             collectionInfo={collectionInfo}
@@ -480,9 +474,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
           <StepReview
             onBack={() => setStep(3)}
             availableServices={availableServices}
-            availableAddons={availableAddons}
             services={services}
-            addons={addons}
             weight={weight}
             paymentMethod={paymentMethod}
             collectionInfo={collectionInfo}
@@ -496,6 +488,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
             editId={editId}
             saveHomeAddress={saveHomeAddress}
             clearBookingState={clearBookingState}
+            onEditSuccess={onEditSuccess}
           />
         )}
       </div>
@@ -503,76 +496,309 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   );
 }
 
+function SectionLabel({ children }) {
+  return (
+    <p
+      style={{
+        fontSize: '0.6875rem',
+        fontWeight: 800,
+        letterSpacing: '0.09em',
+        textTransform: 'uppercase',
+        color: '#9ca3af',
+        marginBottom: 10,
+      }}
+    >
+      {children}
+    </p>
+  );
+}
+
+
+function BookNowStepTitle({ children }) {
+  return (
+    <h1
+      style={{
+        display: "block",
+        margin: 0,
+        padding: 0,
+        fontFamily: "Inter, sans-serif",
+        fontSize: "1.5rem",
+        fontWeight: 800,
+        lineHeight: 1.2,
+        color: "#1f2937",
+        letterSpacing: "-0.02em",
+      }}
+    >
+      {children}
+    </h1>
+  );
+}
+
+function Card({ children, style }) {
+  return (
+    <div
+      style={{
+        background: '#fff',
+        borderRadius: '0.875rem',
+        border: '1px solid rgba(99,188,230,0.25)',
+        boxShadow: '0 2px 12px rgba(56,120,194,0.07)',
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+
+function BookNowTextBox({
+  as = "input",
+  value,
+  onChange,
+  onBlur,
+  onFocus,
+  placeholder,
+  type = "text",
+  rows = 3,
+  maxLength,
+  disabled = false,
+  id,
+  className = "",
+  style = {},
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const textareaRef = useRef(null);
+  const Component = as === "textarea" ? "textarea" : "input";
+
+  const resizeTextarea = (textarea) => {
+    if (as !== "textarea" || !textarea) return;
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  };
+
+  useEffect(() => {
+    resizeTextarea(textareaRef.current);
+  }, [value, as]);
+
+  const baseStyle = {
+    width: '100%',
+    border: `1.5px solid ${isFocused ? '#3878c2' : '#e5e7eb'}`,
+    borderRadius: '0.625rem',
+    padding: '0.8125rem 1rem',
+    fontSize: '0.9375rem',
+    color: disabled ? '#b4b4b4' : '#1f2937',
+    background: disabled ? '#f3f4f6' : '#fff',
+    outline: 'none',
+    fontFamily: 'Inter, sans-serif',
+    boxSizing: 'border-box',
+    transition: 'border-color 0.15s',
+    ...style,
+    resize: as === "textarea" ? 'none' : undefined,
+    overflow: as === "textarea" ? 'hidden' : undefined,
+  };
+
+  return (
+    <Component
+      ref={as === "textarea" ? textareaRef : undefined}
+      id={id}
+      type={as === "textarea" ? undefined : type}
+      value={value}
+      onChange={(event) => {
+        resizeTextarea(event.target);
+        if (onChange) onChange(event);
+      }}
+      onBlur={(event) => {
+        setIsFocused(false);
+        if (onBlur) onBlur(event);
+      }}
+      onFocus={(event) => {
+        setIsFocused(true);
+        resizeTextarea(event.target);
+        if (onFocus) onFocus(event);
+      }}
+      placeholder={placeholder}
+      rows={as === "textarea" ? rows : undefined}
+      maxLength={maxLength}
+      disabled={disabled}
+      className={className}
+      style={baseStyle}
+    />
+  );
+}
+
 /* =========================
-   Step 1 – Select Services
+   Step 1 – Laundry Details
 ========================= */
 function StepSelectServices({
   onNext,
   availableServices,
-  availableAddons,
   loading,
   services,
   setServices,
-  addons,
-  setAddons,
   weight,
   setWeight,
-  collectionInfo,
   paymentMethod,
   setPaymentMethod,
   numberOfBags,
   setNumberOfBags,
   bagDescription,
   setBagDescription,
+  isEditMode = false,
 }) {
+  const loadOptions = [
+    {
+      id: 'regular',
+      label: 'Regular Light Mix',
+      sublabel: 'Up to 7.5 kg',
+      description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.',
+      price: 220,
+    },
+    {
+      id: 'heavy',
+      label: 'Heavy Load',
+      sublabel: 'Up to 5 kg',
+      description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.',
+      price: 220,
+    },
+    {
+      id: 'perPiece',
+      label: 'Per Piece',
+      sublabel: '₱220 per item',
+      description: 'Comforter, Duvet, Pillow, etc.',
+      price: 220,
+    },
+  ];
 
-  const [serviceError, setServiceError] = useState("");
-
-  const toggleService = (key) => {
-    setServiceError("");
-    setServices((prev) => ({ ...prev, [key]: prev[key] === 0 ? 1 : 0 }));
+  const getStoredValue = (key, fallback) => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : fallback;
+    } catch {
+      return fallback;
+    }
   };
 
-  const ServiceCard = ({ title, price, estimatedHours, value, onToggle }) => {
-    const selected = value === 1;
-    return (
-      <div
-        className="border rounded-lg p-4 transition"
-        style={{
-          borderColor: "#3878c2",
-          backgroundColor: selected ? "rgba(99,188,230,0.1)" : "#ffffff",
-        }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0 pr-2">
-            <h3 className="font-semibold text-[#3878c2]">{title}</h3>
-            <p className="text-xs text-[#3878c2]">₱{price.toFixed(2)} per load</p>
-            {estimatedHours > 0 && (
-              <p className="text-[10px] text-gray-500 italic mt-0.5">~ {estimatedHours} hours</p>
-            )}
-          </div>
-          <button
-            onClick={onToggle}
-            className="flex items-center justify-center gap-1 px-3 py-1 border rounded text-sm font-semibold transition whitespace-nowrap"
-            style={{
-              borderColor: "#4bad40",
-              backgroundColor: selected ? "#4bad40" : "transparent",
-              color: selected ? "#ffffff" : "#4bad40",
-            }}
-          >
-            {selected ? (
-              <>
-                <CheckIcon color="#ffffff" /> Added
-              </>
-            ) : (
-              <>
-                <PlusIcon color="#4bad40" /> Add
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+  const getStoredLoads = () => {
+    const stored = getStoredValue('bookingSelectedLoad', ['regular']);
+    return Array.isArray(stored) ? stored : [stored || 'regular'];
+  };
+
+  const [selectedLoads, setSelectedLoads] = useState(() => getStoredLoads());
+  const [loadQuantities, setLoadQuantities] = useState(() =>
+    getStoredValue('bookingLoadQuantities', { regular: 1, heavy: 1, perPiece: 1 })
+  );
+  const [acceptedTerms, setAcceptedTerms] = useState(() => isEditMode);
+  const [acceptedPolicy, setAcceptedPolicy] = useState(() => isEditMode);
+  const [serviceError, setServiceError] = useState("");
+
+  const [bagDescriptionDraft, setBagDescriptionDraft] = useState(bagDescription || "");
+
+  useEffect(() => {
+    setBagDescriptionDraft(bagDescription || "");
+  }, [bagDescription]);
+
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    const storedLoads = getStoredLoads();
+    const storedQuantities = getStoredValue('bookingLoadQuantities', {
+      regular: numberOfBags || 1,
+      heavy: 1,
+      perPiece: 1,
+    });
+
+    setSelectedLoads(storedLoads);
+    setLoadQuantities(storedQuantities);
+  }, [isEditMode, numberOfBags]);
+
+  const selectedLoadOptions = useMemo(
+    () => loadOptions.filter(option => selectedLoads.includes(option.id)),
+    [selectedLoads]
+  );
+
+  const totalSelectedQuantity = useMemo(
+    () => selectedLoadOptions.reduce((sum, option) => sum + Number(loadQuantities[option.id] || 1), 0),
+    [selectedLoadOptions, loadQuantities]
+  );
+
+  const total = useMemo(
+    () => selectedLoadOptions.reduce((sum, option) => sum + option.price * Number(loadQuantities[option.id] || 1), 0),
+    [selectedLoadOptions, loadQuantities]
+  );
+
+  const canProceed = acceptedTerms && acceptedPolicy;
+
+  const agreementRowStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    padding: '0.875rem 1.375rem',
+    minHeight: 88,
+    cursor: 'pointer',
+  };
+
+  const agreementCheckboxStyle = {
+    width: 18,
+    height: 18,
+    accentColor: '#3878c2',
+    flexShrink: 0,
+  };
+
+  const agreementTextStyle = {
+    fontSize: '0.9375rem',
+    color: '#374151',
+    lineHeight: 1.5,
+  };
+
+  useEffect(() => {
+    localStorage.setItem('bookingSelectedLoad', JSON.stringify(selectedLoads));
+  }, [selectedLoads]);
+
+  useEffect(() => {
+    localStorage.setItem('bookingLoadQuantities', JSON.stringify(loadQuantities));
+  }, [loadQuantities]);
+
+  useEffect(() => {
+    const fullService = availableServices.find(service =>
+      service.name?.toLowerCase().includes('full service')
     );
+    const serviceKey = (fullService?.name || 'Full Service Laundry').toLowerCase();
+
+    setServices(prev => {
+      const resetServices = Object.keys(prev || {}).reduce((acc, key) => {
+        acc[key] = 0;
+        return acc;
+      }, {});
+
+      return {
+        ...resetServices,
+        [serviceKey]: totalSelectedQuantity || 1,
+      };
+    });
+
+    setNumberOfBags(totalSelectedQuantity || 1);
+    setPaymentMethod('gcash');
+  }, [availableServices, totalSelectedQuantity, setServices, setNumberOfBags, setPaymentMethod]);
+
+  const changeQty = (id, delta, event) => {
+    event.stopPropagation();
+    setServiceError("");
+    setLoadQuantities(prev => ({
+      ...prev,
+      [id]: Math.max(1, Number(prev[id] || 1) + delta),
+    }));
+  };
+
+  const toggleLoadType = id => {
+    setServiceError("");
+    setSelectedLoads(prev => {
+      if (prev.includes(id)) {
+        return prev.length === 1 ? prev : prev.filter(loadId => loadId !== id);
+      }
+
+      return [...prev, id];
+    });
   };
 
   if (loading) {
@@ -589,134 +815,335 @@ function StepSelectServices({
       setServiceError("Please select at least one laundry service to continue.");
       return;
     }
+
+    if (!canProceed) {
+      setServiceError("Please accept the Terms & Conditions and booking agreement to continue.");
+      return;
+    }
+
+    setBagDescription(bagDescriptionDraft);
     setServiceError("");
     onNext();
   };
 
   return (
     <>
-    <div className="px-0 sm:px-2">
-      <h2 className="text-lg font-semibold text-[#3878c2] mb-4 sm:text-xl">
-        Select Services
-      </h2>
-      
-      {serviceError && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm font-medium animate-pulse">
-           ⚠️ {serviceError}
-        </div>
-      )}
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {availableServices.map((s) => (
-          <ServiceCard
-            key={s.id}
-            title={s.name}
-            price={s.currentPrice}
-            estimatedHours={s.estimatedHours}
-            value={services[s.name.toLowerCase()]}
-            onToggle={() => toggleService(s.name.toLowerCase())}
-          />
-        ))}
-      </div>
-
-      {/* Add-Ons */}
-      <h3 className="text-sm font-semibold text-[#3878c2] mt-6 mb-2">
-        Add-Ons
-      </h3>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-        <div className="lg:col-span-1">
-          {availableAddons.map((a) => (
-            <AddonRow
-              key={a.id}
-              label={a.name}
-              estimatedHours={a.estimatedHours}
-              value={addons[a.name.toLowerCase()]}
-              onChange={(v) =>
-                setAddons((prev) => ({ ...prev, [a.name.toLowerCase()]: Math.max(0, Math.floor(v)) }))
-              }
-              allowDecimal={false}
-            />
-          ))}
+      <div className="px-0 sm:px-2">
+        <div className="mb-8">
+          <BookNowStepTitle>Laundry Details</BookNowStepTitle>
         </div>
 
-        {/* No. of Loads/Bags */}
-        <div className="flex items-start justify-between gap-2 mb-3 lg:col-span-1">
-          <span className="text-sm font-semibold text-[#3878c2] max-w-[60%] pr-2">
-            No. of Loads/Bags
-          </span>
-          <QuantityInput
-            value={numberOfBags}
-            onChange={setNumberOfBags}
-            allowDecimal={false}
-            minValue={1}
-          />
-        </div>
-
-        {/* Weight & Price Guide */}
-        <div className="lg:col-span-2 grid gap-3">
-          <div className="text-xs text-[#3878c2] bg-[#f0f6ff] p-3 rounded-lg border border-[#3878c2]/20">
-            <p className="font-semibold mb-1"> Weight Guide</p>
-            <p>Each load/service covers up to <strong>7.5 kgs</strong> of laundry. For heavier loads, please select additional services or contact us for assistance.</p>
+        {serviceError && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm font-medium animate-pulse">
+             ⚠️ {serviceError}
           </div>
-          
-          <div className="text-xs text-[#3878c2] bg-white p-3 rounded-lg border border-[#3878c2]">
-            <p className="font-semibold mb-2"> Quick Price Guide</p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              {availableServices.map(s => (
-                <div key={s.id} className="flex justify-between border-b border-gray-100 pb-1">
-                  <span>{s.name}</span>
-                  <span className="font-bold">₱{s.currentPrice.toFixed(0)}</span>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
+          <div>
+            <SectionLabel>Service</SectionLabel>
+            <Card>
+              <div style={{ padding: '1.25rem 1.375rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '1.0625rem', fontWeight: 700, color: '#1f2937' }}>
+                      Full Service Laundry
+                    </p>
+                    <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginTop: 3 }}>
+                      Includes wash, dry, fold, detergent, and fabric conditioner.
+                    </p>
+                  </div>
+
+                  <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 20 }}>
+                    <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#3878c2', letterSpacing: '-0.03em' }}>
+                      ₱220
+                    </span>
+                    <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: 1 }}>/ load</p>
+                  </div>
                 </div>
-              ))}
-              {availableAddons.map(a => (
-                <div key={a.id} className="flex justify-between border-b border-gray-100 pb-1">
-                  <span>{a.name} (Add-on)</span>
-                  <span className="font-bold">₱{a.currentPrice.toFixed(0)}</span>
-                </div>
-              ))}
+              </div>
+            </Card>
+          </div>
+
+          <div>
+            <SectionLabel>Load Type</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {loadOptions.map(option => {
+                const active = selectedLoads.includes(option.id);
+
+                return (
+                  <div
+                    key={option.id}
+                    onClick={() => toggleLoadType(option.id)}
+                    style={{
+                      background: '#fff',
+                      border: `2px solid ${active ? '#3878c2' : 'rgba(99,188,230,0.22)'}`,
+                      borderRadius: '0.875rem',
+                      padding: '1rem 1.25rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 14,
+                      boxShadow: active
+                        ? '0 2px 12px rgba(56,120,194,0.12)'
+                        : '0 1px 4px rgba(56,120,194,0.04)',
+                      transition: 'border-color 0.15s, box-shadow 0.15s',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={active}
+                      onChange={() => toggleLoadType(option.id)}
+                      onClick={event => event.stopPropagation()}
+                      style={{ width: 18, height: 18, accentColor: '#3878c2', flexShrink: 0 }}
+                    />
+
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 600, fontSize: '0.9375rem', color: active ? '#1f2937' : '#374151' }}>
+                        {option.label}
+                      </p>
+                      <p style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#6b7280', marginTop: 1 }}>
+                        {option.sublabel}
+                      </p>
+                      <p style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#6b7280', marginTop: 2 }}>
+                        {option.description}
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {active ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={event => changeQty(option.id, -1, event)}
+                            style={{
+                              width: 30,
+                              height: 30,
+                              borderRadius: '50%',
+                              border: '1.5px solid #d1d5db',
+                              background: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: '#6b7280',
+                            }}
+                          >
+                            −
+                          </button>
+
+                          <span style={{ width: 22, textAlign: 'center', fontWeight: 700, fontSize: '1rem', color: '#1f2937' }}>
+                            {loadQuantities[option.id] || 1}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={event => changeQty(option.id, 1, event)}
+                            style={{
+                              width: 30,
+                              height: 30,
+                              borderRadius: '50%',
+                              border: '1.5px solid #d1d5db',
+                              background: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: '#6b7280',
+                            }}
+                          >
+                            +
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '0.8125rem', color: '#d1d5db', fontWeight: 500 }}>
+                          Qty: 0
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+
+          <div>
+            <SectionLabel>Laundry Bag Information</SectionLabel>
+            <Card style={{ padding: '1.125rem 1.375rem' }}>
+              <label style={{ display: 'block', marginBottom: 12 }}>
+                <span style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#374151', marginBottom: 6 }}>
+                  Describe your laundry bag and items inside
+                </span>
+
+                <BookNowLimitedTextBox
+                  as="textarea"
+                  value={bagDescriptionDraft}
+                  onChange={event => setBagDescriptionDraft(event.target.value)}
+                  onBlur={event => setBagDescription(event.target.value)}
+                  placeholder="Example: 1 blue laundry bag with shirts and pants"
+                  rows={3}
+                  style={{ resize: 'vertical' }}
+                />
+
+                <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: 6 }}>
+                  Optional • Up to 500 characters
+                </p>
+              </label>
+            </Card>
+          </div>
+
+          <div>
+            <SectionLabel>Payment Method</SectionLabel>
+            <Card style={{ padding: '1rem 1.375rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1f2937' }}>GCash</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          <div>
+            <SectionLabel>Order Total</SectionLabel>
+            <Card style={{ padding: '1.125rem 1.375rem' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.5fr 0.6fr 0.9fr',
+                  gap: 12,
+                  paddingBottom: 10,
+                  borderBottom: '1px solid #e5e7eb',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  color: '#374151',
+                }}
+              >
+                <span>Load Type</span>
+                <span style={{ textAlign: 'center' }}>Qty</span>
+                <span style={{ textAlign: 'right' }}>Subtotal</span>
+              </div>
+
+              {selectedLoadOptions.map(option => {
+                const quantity = loadQuantities[option.id] || 1;
+                const subtotal = option.price * quantity;
+
+                return (
+                  <div
+                    key={option.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.5fr 0.6fr 0.9fr',
+                      gap: 12,
+                      padding: '0.75rem 0',
+                      borderBottom: '1px solid #f3f4f6',
+                      fontSize: '0.875rem',
+                      color: '#6b7280',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span>{option.label}</span>
+                    <span style={{ textAlign: 'center' }}>{quantity}</span>
+                    <span style={{ textAlign: 'right' }}>₱{subtotal}</span>
+                  </div>
+                );
+              })}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12 }}>
+                <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#374151' }}>Total</span>
+                <span style={{ fontSize: '2rem', fontWeight: 800, color: '#3878c2', letterSpacing: '-0.03em' }}>
+                  ₱{total}
+                </span>
+              </div>
+            </Card>
+          </div>
+
+          <div>
+            <SectionLabel>Agreement</SectionLabel>
+            <Card style={{ padding: 0 }}>
+              <label
+                style={{
+                  ...agreementRowStyle,
+                  borderBottom: '1px solid #f3f4f6',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={event => setAcceptedTerms(event.target.checked)}
+                  style={agreementCheckboxStyle}
+                />
+
+                <span style={agreementTextStyle}>
+                  I accept the Terms &amp; Conditions
+                </span>
+              </label>
+
+              <label style={agreementRowStyle}>
+                <input
+                  type="checkbox"
+                  checked={acceptedPolicy}
+                  onChange={event => setAcceptedPolicy(event.target.checked)}
+                  style={agreementCheckboxStyle}
+                />
+
+                <span style={agreementTextStyle}>
+                  I understand that only the selected load type and quantity will be processed. Extra items or excess weight
+                  will not be processed unless stated in my booking.
+                </span>
+              </label>
+            </Card>
+          </div>
         </div>
 
-        {/* Bag Description */}
-        <div className="lg:col-span-1 border rounded-lg p-3 bg-white border-[#3878c2]">
-           <label className="block text-xs font-semibold text-[#3878c2] mb-1">Description of bag(s)</label>
-           <textarea
-             placeholder="e.g., 1 Pink Bag, 1 Blue Bag"
-             value={bagDescription}
-             onChange={(e) => setBagDescription(e.target.value)}
-             className="w-full text-sm p-1 border rounded text-[#3878c2] bg-white border-transparent placeholder-[#b4b4b4] focus:outline-none focus:ring-0"
-             rows={2}
-           />
-        </div>
-      </div>
-
-      {/* Payment Method */}
-      <h3 className="text-sm font-semibold text-[#3878c2] mt-6 mb-2">
-        Payment Method
-      </h3>
-
-      <div className="space-y-2 max-w-md text-[#3878c2]">
-        <RadioRow
-          id="payment-gcash"
-          label="GCash"
-          checked={paymentMethod === "gcash"}
-          onChange={() => setPaymentMethod("gcash")}
-          name="paymentMethod"
-        />
-      </div>
-
-      {/* Next Button */}
-      <button
-        onClick={handleNextSubmit}
-        className="mt-8 mx-auto xl:mr-0 xl:ml-auto block w-40 md:w-48 xl:w-52 py-2 md:py-3 xl:py-2.5 rounded-lg text-white font-bold text-base md:text-lg xl:text-base cursor-pointer hover:bg-[#3f9136] transition-all shadow-md active:scale-95"
-        style={{ backgroundColor: "#4bad40" }}
-      >
-        Next
-      </button>
+        <button
+          onClick={handleNextSubmit}
+          className={`mt-8 mx-auto xl:mr-0 xl:ml-auto block w-40 md:w-48 xl:w-52 py-2 md:py-3 xl:py-2.5 rounded-lg text-white font-bold text-base md:text-lg xl:text-base transition-all shadow-md active:scale-95 ${canProceed ? 'cursor-pointer hover:bg-[#3f9136]' : 'cursor-not-allowed opacity-70'}`}
+          style={{ backgroundColor: canProceed ? "#4bad40" : "#b4b4b4" }}
+        >
+          Next
+        </button>
       </div>
     </>
+  );
+}
+
+function BookNowLimitedTextBox({
+  maxLength = 500,
+  onChange,
+  onBlur,
+  value = "",
+  ...props
+}) {
+  const limitValue = (nextValue) => nextValue.slice(0, maxLength);
+
+  const handleChange = (event) => {
+    const limitedValue = limitValue(event.target.value);
+
+    if (limitedValue !== event.target.value) {
+      event.target.value = limitedValue;
+    }
+
+    if (onChange) onChange(event);
+  };
+
+  const handleBlur = (event) => {
+    const limitedValue = limitValue(event.target.value);
+
+    if (limitedValue !== event.target.value) {
+      event.target.value = limitedValue;
+    }
+
+    if (onBlur) onBlur(event);
+  };
+
+  return (
+    <BookNowTextBox
+      {...props}
+      value={limitValue(value || "")}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      maxLength={maxLength}
+    />
   );
 }
 
@@ -807,24 +1234,6 @@ function QuantityInput({ value, onChange, allowDecimal, minValue = 0 }) {
   );
 }
 
-function AddonRow({ label, estimatedHours, value, onChange, allowDecimal }) {
-  return (
-    <div className="flex items-center justify-between gap-2 mb-3">
-      <div className="flex flex-col max-w-[60%] pr-2">
-        <span className="text-sm text-[#3878c2]">{label}</span>
-        {estimatedHours > 0 && (
-          <span className="text-[10px] text-gray-400 italic">~ {estimatedHours} hrs</span>
-        )}
-      </div>
-      <QuantityInput
-        value={value}
-        onChange={onChange}
-        allowDecimal={allowDecimal}
-      />
-    </div>
-  );
-}
-
 /* =========================
    Icons
 ========================= */
@@ -858,7 +1267,214 @@ function CheckIcon({ color = "currentColor" }) {
   );
 }
 
-function StepCollection({
+const timeSlots = [
+  { id: "morning", label: "Morning", time: "8:30 AM", value: "08:30", hour: 8, minute: 30 },
+  { id: "afternoon", label: "Afternoon", time: "1:00 PM", value: "13:00", hour: 13, minute: 0 },
+];
+
+function getSlotTime(slotId) {
+  return timeSlots.find((slot) => slot.id === slotId)?.value || "";
+}
+
+function getSlotIdByValue(value) {
+  return timeSlots.find((slot) => slot.value === value)?.id || null;
+}
+
+function getTodayDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getTomorrowDateString() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const year = tomorrow.getFullYear();
+  const month = String(tomorrow.getMonth() + 1).padStart(2, "0");
+  const day = String(tomorrow.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getSlotDateTime(date, slotId) {
+  const selectedSlot = timeSlots.find((slot) => slot.id === slotId);
+
+  if (!date || !selectedSlot) return null;
+
+  const dateTime = new Date(`${date}T00:00:00`);
+  dateTime.setHours(selectedSlot.hour, selectedSlot.minute, 0, 0);
+
+  return dateTime;
+}
+
+function isPastSlotToday(date, slotId) {
+  const slotDateTime = getSlotDateTime(date, slotId);
+
+  if (!slotDateTime || date !== getTodayDateString()) return false;
+
+  return slotDateTime <= new Date();
+}
+
+function areAllTodayTimeSlotsPast() {
+  const today = getTodayDateString();
+
+  return timeSlots.every((slot) => isPastSlotToday(today, slot.id));
+}
+
+function getScheduleMinDateString() {
+  return areAllTodayTimeSlotsPast() ? getTomorrowDateString() : getTodayDateString();
+}
+
+function isUnavailableScheduleDate(date) {
+  return date === getTodayDateString() && areAllTodayTimeSlotsPast();
+}
+
+function ScheduleCard({ title, dateLabel, date, onDateChange, slot, onSlotChange }) {
+  const minScheduleDate = getScheduleMinDateString();
+
+  return (
+    <div
+      style={{
+        background: "#fff",
+        borderRadius: "1rem",
+        boxShadow: "0 2px 16px rgba(56,120,194,0.09)",
+        border: "1px solid rgba(99,188,230,0.28)",
+        padding: "1.75rem",
+        flex: 1,
+        minWidth: 0,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-5">
+        <h2
+          style={{
+            fontWeight: 700,
+            fontSize: "1.0625rem",
+            color: "#1f2937",
+          }}
+        >
+          {title}
+        </h2>
+      </div>
+
+      <label style={{ display: "block", marginBottom: 6 }}>
+        <span
+          style={{
+            fontSize: "0.75rem",
+            fontWeight: 700,
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            color: "#9ca3af",
+          }}
+        >
+          {dateLabel}
+        </span>
+
+        <div style={{ position: "relative", marginTop: 8 }}>
+          <input
+            type="date"
+            value={date}
+            min={minScheduleDate}
+            onChange={(event) => onDateChange(event.target.value)}
+            style={{
+              width: "100%",
+              border: `1.5px solid ${date ? "#3878c2" : "#e5e7eb"}`,
+              borderRadius: "0.625rem",
+              padding: "0.75rem 1rem",
+              fontSize: "0.9375rem",
+              color: date ? "#1f2937" : "#9ca3af",
+              background: "#fff",
+              outline: "none",
+              fontFamily: "Inter, sans-serif",
+              boxSizing: "border-box",
+              cursor: "pointer",
+            }}
+          />
+        </div>
+      </label>
+
+      <div
+        style={{
+          overflow: "hidden",
+          maxHeight: date ? 200 : 0,
+          opacity: date ? 1 : 0,
+          transition: "max-height 0.3s ease, opacity 0.25s ease",
+          marginTop: date ? 20 : 0,
+        }}
+      >
+        <span
+          style={{
+            display: "block",
+            fontSize: "0.75rem",
+            fontWeight: 700,
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            color: "#9ca3af",
+            marginBottom: 10,
+          }}
+        >
+          {title.split(" ")[0]} Time Slot
+        </span>
+
+        <div className="flex gap-3">
+          {timeSlots.map(({ id, label, time }) => {
+            const active = slot === id;
+            const disabled = isPastSlotToday(date, id);
+
+            return (
+              <button
+                type="button"
+                key={id}
+                onClick={() => {
+                  if (!disabled) onSlotChange(id);
+                }}
+                disabled={disabled}
+                style={{
+                  flex: 1,
+                  border: `2px solid ${active ? "#3878c2" : "#e5e7eb"}`,
+                  borderRadius: "0.75rem",
+                  padding: "0.875rem 0.75rem",
+                  background: active ? "rgba(56,120,194,0.05)" : "#fff",
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  textAlign: "center",
+                  transition: "all 0.15s",
+                  fontFamily: "Inter, sans-serif",
+                  opacity: disabled ? 0.45 : 1,
+                }}
+              >
+                <p
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "0.875rem",
+                    color: active ? "#3878c2" : "#374151",
+                    marginBottom: 2,
+                  }}
+                >
+                  {label}
+                </p>
+
+                <p
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: active ? "#3878c2" : "#9ca3af",
+                    fontWeight: 500,
+                  }}
+                >
+                  {time}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StepSchedule({
   onBack,
   onNext,
   collectionInfo,
@@ -868,250 +1484,228 @@ function StepCollection({
   totalEstimatedHours,
 }) {
   const { showToast } = useToast();
-  const optionLabels = {
-    dropOffPickUpLater: "Drop-off & Pick up later",
-    dropOffDelivered: "Drop-off & Delivered",
-    pickedUpDelivered: "Picked up & Delivered",
-  };
-  const option = collectionInfo.option || "dropOffPickUpLater";
-  const optionLabel = optionLabels[option] || optionLabels.dropOffPickUpLater;
+  const [error, setError] = useState("");
+  const [isValidTime, setIsValidTime] = useState(false);
+
+  const optionLabel = "Pickup & Delivery";
 
   useEffect(() => {
-    if (collectionInfo.optionLabel !== optionLabel) {
-      setCollectionInfo((prev) => ({ ...prev, optionLabel }));
+    if (collectionInfo.option !== "pickedUpDelivered" || collectionInfo.optionLabel !== optionLabel) {
+      setCollectionInfo((previous) => ({
+        ...previous,
+        option: "pickedUpDelivered",
+        optionLabel,
+      }));
     }
-  }, [collectionInfo.optionLabel, optionLabel, setCollectionInfo]);
+  }, [collectionInfo.option, collectionInfo.optionLabel, setCollectionInfo]);
 
-  // Autofill texts based on selected option
-  const autofill = {
-    dropOffPickUpLater: {
-      collection: "I will drop off my laundry at the shop on this schedule.",
-      delivery: "I will pick up my clean laundry from the shop on this schedule.",
-    },
-    dropOffDelivered: {
-      collection: "I will drop off my laundry at the shop on this schedule.",
-      delivery: "The rider will deliver my clean laundry to my home on this schedule.",
-    },
-    pickedUpDelivered: {
-      collection: "The rider will pick up my laundry from my home on this schedule.",
-      delivery: "The rider will deliver my clean laundry to my home on this schedule.",
-    },
-  };
+  function getPickupDeliveryScheduleError() {
+    const collectionDateTime = getSlotDateTime(
+      collectionInfo.date,
+      collectionInfo.collectionSlot
+    );
 
-  const [isValidTime, setIsValidTime] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [showErrors, setShowErrors] = useState(false);
+    const deliveryDateTime = getSlotDateTime(
+      deliveryInfo.date,
+      deliveryInfo.deliverySlot
+    );
 
-  useEffect(() => {
-    if (!collectionInfo.date || !collectionInfo.time || !deliveryInfo.date || !deliveryInfo.time) {
-      setIsValidTime(false);
-      setErrorMessage("Please select a date and time slot to continue.");
-      return;
+    if (!collectionDateTime || !deliveryDateTime) {
+      return "Please select a date and time slot to continue.";
     }
 
-    const collectionDateTime = new Date(`${collectionInfo.date}T${collectionInfo.time}`);
-    const deliveryDateTime = new Date(`${deliveryInfo.date}T${deliveryInfo.time}`);
+    if (
+      isUnavailableScheduleDate(collectionInfo.date) ||
+      isUnavailableScheduleDate(deliveryInfo.date)
+    ) {
+      return "Please select a future date to continue.";
+    }
+
+    if (
+      isPastSlotToday(collectionInfo.date, collectionInfo.collectionSlot) ||
+      isPastSlotToday(deliveryInfo.date, deliveryInfo.deliverySlot)
+    ) {
+      return "Please select a future time slot to continue.";
+    }
 
     if (deliveryDateTime <= collectionDateTime) {
-      setIsValidTime(false);
-      setErrorMessage("The delivery/pick-up slot must be after the collection slot.");
-    } else {
-      setIsValidTime(true);
-      setErrorMessage("");
+      return "Delivery schedule must be after the pickup schedule.";
     }
-  }, [collectionInfo.date, collectionInfo.time, deliveryInfo.date, deliveryInfo.time]);
 
-  const handleNextSubmit = () => {
-    setShowErrors(true);
-    if (!isValidTime) {
-      showToast(errorMessage, "error");
+    return "";
+  }
+
+  function validatePickupDeliverySchedule(showError = false) {
+    const validationError = getPickupDeliveryScheduleError();
+
+    if (showError) {
+      setError(validationError);
+    }
+
+    return validationError === "";
+  }
+
+  useEffect(() => {
+    setIsValidTime(validatePickupDeliverySchedule(false));
+  }, [
+    collectionInfo.date,
+    collectionInfo.collectionSlot,
+    deliveryInfo.date,
+    deliveryInfo.deliverySlot,
+  ]);
+
+  function updatePickupDate(date) {
+    setCollectionInfo((previous) => ({
+      ...previous,
+      option: "pickedUpDelivered",
+      optionLabel,
+      date,
+      time: "",
+      collectionSlot: null,
+    }));
+
+    setError("");
+  }
+
+  function updatePickupSlot(slotId) {
+    setCollectionInfo((previous) => ({
+      ...previous,
+      option: "pickedUpDelivered",
+      optionLabel,
+      time: getSlotTime(slotId),
+      collectionSlot: slotId,
+    }));
+
+    setError("");
+  }
+
+  function updateDeliveryDate(date) {
+    setDeliveryInfo((previous) => ({
+      ...previous,
+      date,
+      time: "",
+      deliverySlot: null,
+    }));
+
+    setError("");
+  }
+
+  function updateDeliverySlot(slotId) {
+    setDeliveryInfo((previous) => ({
+      ...previous,
+      time: getSlotTime(slotId),
+      deliverySlot: slotId,
+    }));
+
+    setError("");
+  }
+
+  function handleNext() {
+    const validationError = getPickupDeliveryScheduleError();
+
+    if (validationError) {
+      setError(validationError);
+      showToast(validationError, "error");
       return;
     }
+
+    setError("");
     onNext();
-  };
+  }
 
   return (
-    <div className="text-[#3878c2] space-y-6 px-0 sm:px-2">
-      {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Collection & Delivery</h2>
-        {totalEstimatedHours > 0 && (
-          <div className="text-xs font-medium text-gray-500 italic">
-            Total Estimated Duration: {totalEstimatedHours} hours
-          </div>
-        )}
+    <div
+      className="text-[#3878c2] space-y-6 px-0 sm:px-2"
+      style={{
+        fontFamily: "Inter, sans-serif",
+      }}
+    >
+      <div className="mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <BookNowStepTitle>Pickup &amp; Delivery Schedule</BookNowStepTitle>
+
+          {totalEstimatedHours > 0 && (
+            <div className="text-xs font-medium text-gray-500 italic">
+              Total Estimated Duration: {totalEstimatedHours} hours
+            </div>
+          )}
+        </div>
       </div>
 
-      {!isValidTime && showErrors && (
-        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm font-medium animate-pulse">
-           ⚠️ {errorMessage}
+      {error && (
+        <div
+          style={{
+            marginBottom: 18,
+            padding: "0.85rem 1rem",
+            borderRadius: "0.75rem",
+            background: "#fee2e2",
+            color: "#991b1b",
+            fontWeight: 600,
+          }}
+        >
+          {error}
         </div>
       )}
 
-      {/* Options */}
-      <div className="space-y-2">
-        <RadioRow
-          id="option1"
-          label="Drop-off & Pick up later"
-          checked={option === "dropOffPickUpLater"}
-          onChange={() =>
-            setCollectionInfo((prev) => ({
-              ...prev,
-              option: "dropOffPickUpLater",
-              optionLabel: optionLabels.dropOffPickUpLater,
-            }))
-          }
+      <div className="flex flex-col md:flex-row gap-5 mb-4">
+        <ScheduleCard
+          title="Pickup Schedule"
+          dateLabel="Pickup Date"
+          date={collectionInfo.date || ""}
+          onDateChange={updatePickupDate}
+          slot={collectionInfo.collectionSlot}
+          onSlotChange={updatePickupSlot}
         />
-        <RadioRow
-          id="option2"
-          label="Drop-off & Delivered"
-          checked={option === "dropOffDelivered"}
-          onChange={() =>
-            setCollectionInfo((prev) => ({
-              ...prev,
-              option: "dropOffDelivered",
-              optionLabel: optionLabels.dropOffDelivered,
-            }))
-          }
-        />
-        <RadioRow
-          id="option3"
-          label="Picked up & Delivered"
-          checked={option === "pickedUpDelivered"}
-          onChange={() =>
-            setCollectionInfo((prev) => ({
-              ...prev,
-              option: "pickedUpDelivered",
-              optionLabel: optionLabels.pickedUpDelivered,
-            }))
-          }
+
+        <ScheduleCard
+          title="Delivery Schedule"
+          dateLabel="Delivery Date"
+          date={deliveryInfo.date || ""}
+          onDateChange={updateDeliveryDate}
+          slot={deliveryInfo.deliverySlot}
+          onSlotChange={updateDeliverySlot}
         />
       </div>
 
-      {/* Divider */}
-      <hr className="border-t-1 border-[#3878c2] w-11/12 mx-auto md:hidden" />
-
-      {/* Collection & Delivery Section */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Collection Section */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-[#3878c2]">
-              {option === 'pickedUpDelivered' ? 'Scheduled Pickup' : 'Scheduled Drop-Off'}
-            </h3>
-            <div className="text-[10px] bg-white border border-[#3878c2] px-2 py-1 rounded-full">
-              {collectionInfo.date ? formatDate(collectionInfo.date) : 'No date'} @ {collectionInfo.time ? formatTime(collectionInfo.time) : 'No time'}
-            </div>
-          </div>
-          
-          <BookingCalendar 
-            selectedDate={collectionInfo.date}
-            onDateChange={(date) => setCollectionInfo(prev => ({ ...prev, date }))}
-            selectedTime={collectionInfo.time}
-            onTimeChange={(time) => setCollectionInfo(prev => ({ ...prev, time }))}
-          />
-
-          <div className="flex flex-col gap-1 items-center md:items-start">
-            <input
-              type="text"
-              value={autofill[option].collection}
-              readOnly
-              className="w-full max-w-sm p-2 text-center rounded border border-[#3878c2] text-[#3878c2] bg-white text-[10px] sm:text-xs font-medium"
-            />
-          </div>
-        </div>
-
-        {/* Delivery Section */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-[#3878c2]">
-              {option === 'dropOffPickUpLater' ? 'Scheduled Pick-Up' : 'Scheduled Delivery'}
-            </h3>
-            <div className="text-[10px] bg-white border border-[#3878c2] px-2 py-1 rounded-full">
-              {deliveryInfo.date ? formatDate(deliveryInfo.date) : 'No date'} @ {deliveryInfo.time ? formatTime(deliveryInfo.time) : 'No time'}
-            </div>
-          </div>
-
-          <BookingCalendar 
-            selectedDate={deliveryInfo.date}
-            onDateChange={(date) => setDeliveryInfo(prev => ({ ...prev, date }))}
-            selectedTime={deliveryInfo.time}
-            onTimeChange={(time) => setDeliveryInfo(prev => ({ ...prev, time }))}
-          />
-
-          <div className="flex flex-col gap-1 items-center md:items-start">
-            <input
-              type="text"
-              value={autofill[option].delivery}
-              readOnly
-              className="w-full max-w-sm p-2 text-center rounded border border-[#3878c2] text-[#3878c2] bg-white text-[10px] sm:text-xs font-medium"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation Buttons */}
-      <div className="flex items-center justify-between gap-3 mt-6">
+      <div className="flex items-center justify-between gap-4 pb-12 mt-10">
         <button
+          type="button"
           onClick={onBack}
-          className="px-4 py-2 border border-[#4bad40] rounded text-[#4bad40] bg-white"
+          style={{
+            padding: "0.75rem 2rem",
+            border: "1.5px solid #d1d5db",
+            borderRadius: "0.625rem",
+            fontWeight: 600,
+            color: "#6b7280",
+            background: "#fff",
+            cursor: "pointer",
+            fontSize: "0.9375rem",
+            fontFamily: "Inter, sans-serif",
+          }}
         >
           Back
         </button>
+
         <button
-          onClick={handleNextSubmit}
-          className={`px-4 py-2 rounded text-white transition-colors ${isValidTime ? 'bg-[#4bad40]' : 'bg-gray-400'}`}
+          type="button"
+          onClick={handleNext}
+          style={{
+            padding: "0.75rem 2.5rem",
+            border: "none",
+            borderRadius: "0.625rem",
+            fontWeight: 700,
+            color: "#fff",
+            background: isValidTime ? "#4bad40" : "#d1d5db",
+            cursor: isValidTime ? "pointer" : "not-allowed",
+            fontSize: "0.9375rem",
+            fontFamily: "Inter, sans-serif",
+            letterSpacing: "-0.01em",
+          }}
         >
           Next
         </button>
       </div>
     </div>
-  );
-}
-
-/* =========================
-   Option Row
-========================= */
-function RadioRow({
-  id,
-  label,
-  checked,
-  onChange,
-  disabled = false,
-  name = "radioGroup",
-}) {
-  return (
-    <label
-      htmlFor={id}
-      className={`flex items-center p-2 rounded select-none ${
-        disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
-      } ${
-        checked ? "bg-[#e6f7e6]" : "bg-white"
-      }`}
-    >
-      <span className="relative w-4 h-4 flex-shrink-0 mr-2">
-        {/* Outer thin border */}
-        <span
-          className={`absolute inset-0 rounded-full border border-[#3878c2] bg-white`}
-        ></span>
-        {/* Inner shaded circle when checked */}
-        {checked && (
-          <span className="absolute top-1 left-1 w-2 h-2 bg-[#3878c2] rounded-full"></span>
-        )}
-        <input
-          id={id}
-          type="radio"
-          name={name}
-          checked={checked}
-          onChange={!disabled ? onChange : undefined}
-          disabled={disabled}
-          className={`absolute w-full h-full opacity-0 ${
-            disabled ? "cursor-not-allowed" : "cursor-pointer"
-          }`}
-        />
-      </span>
-      <span className="text-sm font-medium">{label}</span>
-    </label>
   );
 }
 
@@ -1225,6 +1819,7 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
   return (
     <div className="flex flex-col min-h-[70vh] sm:min-h-[72vh] bg-[#ffffff] text-[#3878c2] pb-6 px-0 sm:px-2 relative">
       <div className="z-20 mx-auto w-full max-w-2xl md:max-w-6xl lg:max-w-7xl px-2 sm:px-1 pt-2 pb-4">
+        <SectionLabel>Address Details</SectionLabel>
         <label htmlFor="simple-search" className="sr-only">Search</label>
         <div className="flex items-center gap-2">
           {/* Back button */}
@@ -1348,10 +1943,8 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
 function StepReview({
   onBack,
   services = {},
-  addons = {},
   weight = 0,
   availableServices = [],
-  availableAddons = [],
   paymentMethod = "gcash",
   collectionInfo = { optionLabel: "-", date: "", time: "" },
   deliveryInfo = { date: "", time: "" },
@@ -1364,6 +1957,7 @@ function StepReview({
   editId,
   saveHomeAddress,
   clearBookingState,
+  onEditSuccess,
 }) {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -1374,28 +1968,39 @@ function StepReview({
   const [paymentReference, setPaymentReference] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const calculateTotal = () => {
-    let total = 0;
-    // Base services - multiplied by no. of loads
-    availableServices.forEach(s => {
-      if (services[s.name.toLowerCase()]) {
-        total += s.currentPrice * (Number(numberOfBags) || 1);
-      }
-    });
-    
-    // Add-ons
-    availableAddons.forEach(a => {
-      const qty = Number(addons[a.name.toLowerCase()]) || 0;
-      if (qty > 0) {
-        total += a.currentPrice * qty;
-      }
-    });
+  const loadOptions = [
+    { id: 'regular', label: 'Regular Light Mix', price: 220 },
+    { id: 'heavy', label: 'Heavy Load', price: 220 },
+    { id: 'perPiece', label: 'Per Piece', price: 220 },
+  ];
 
-    return total; 
+  const getStoredValue = (key, fallback) => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : fallback;
+    } catch {
+      return fallback;
+    }
   };
 
-  const calculateDownpayment = () => {
-    return calculateTotal() * 0.25;
+  const selectedLoads = getStoredValue('bookingSelectedLoad', ['regular']);
+  const loadQuantities = getStoredValue('bookingLoadQuantities', { regular: numberOfBags || 1 });
+  const selectedLoadOptions = loadOptions
+    .filter(option => Array.isArray(selectedLoads) ? selectedLoads.includes(option.id) : selectedLoads === option.id)
+    .map(option => ({
+      ...option,
+      quantity: Number(loadQuantities[option.id] || 1),
+    }));
+
+  const fallbackLaundryRows = selectedLoadOptions.length > 0
+    ? selectedLoadOptions
+    : [{ id: 'regular', label: 'Regular Light Mix', price: 220, quantity: Number(numberOfBags) || 1 }];
+
+  const calculateTotal = () => {
+    return fallbackLaundryRows.reduce(
+      (sum, option) => sum + (Number(option.price) || 0) * (Number(option.quantity) || 1),
+      0
+    );
   };
 
   const generateReferenceNumber = () => {
@@ -1404,313 +2009,453 @@ function StepReview({
     return `HL-${timestamp}-${randomPart}`;
   };
 
-  return (
-    <div className="text-[#3878c2] bg-[#ffffff] min-h-screen px-0 py-4 sm:px-2">
-      <h2 className="text-lg font-semibold mb-2 sm:text-xl">Review Booking</h2>
+  const submitBooking = async () => {
+    if (isSubmitting) return; // Prevent spam clicking
+    setIsSubmitting(true);
+    
+    const nextReference = isEditMode ? editId : generateReferenceNumber();
+    const nextPaymentReference = "";
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Services Selected */}
-        <div className="p-4 border rounded bg-[#ffffff] shadow-sm">
-          <h3 className="font-semibold mb-2">Services Selected</h3>
-          <ul className="list-disc list-inside text-sm">
-            {availableServices.filter(s => services[s.name.toLowerCase()]).map(s => (
-              <li key={s.id}>
-                {s.name} (₱{s.currentPrice.toFixed(2)} per load)
-                {s.estimatedHours > 0 && <span className="ml-1 text-[10px] text-gray-500 italic">- ~{s.estimatedHours} hrs</span>}
-              </li>
-            ))}
-            {availableServices.filter(s => services[s.name.toLowerCase()]).length === 0 && <li>None</li>}
-          </ul>
+    // Build the booking payload
+    const selectedServices = Object.entries(services)
+      .filter(([, isSelected]) => Boolean(isSelected))
+      .map(([serviceName]) => serviceName);
 
-          <h4 className="font-semibold mt-4 mb-2">Price Breakdown</h4>
-          <div className="text-sm space-y-2 bg-gray-50 p-3 rounded border border-gray-100">
-            {/* Base Services */}
-            {availableServices.filter(s => services[s.name.toLowerCase()]).map(s => (
-              <div key={`breakdown-${s.id}`} className="flex justify-between text-[#374151]">
-                <span>
-                  {s.name} <span className="text-xs text-[#b4b4b4] ml-1">(₱{s.currentPrice.toFixed(2)} x {numberOfBags || 1} loads)</span>
-                </span>
-                <span className="font-medium">₱{(s.currentPrice * (Number(numberOfBags) || 1)).toFixed(2)}</span>
-              </div>
-            ))}
-            {availableServices.filter(s => services[s.name.toLowerCase()]).length === 0 && (
-              <div className="text-sm text-gray-500">No services selected</div>
-            )}
+    const routeAddresses = getRouteAddresses("pickedUpDelivered");
+    const finalPickup = customerLocation?.address || routeAddresses.pickupAddress;
+    const finalDelivery = customerLocation?.address || routeAddresses.deliveryAddress;
 
-            {/* Add-Ons */}
-            {availableAddons.filter(a => Number(addons[a.name.toLowerCase()]) > 0).map(a => (
-              <div key={`breakdown-addon-${a.id}`} className="flex justify-between text-[#374151]">
-                <span>
-                  {a.name} <span className="text-xs text-[#b4b4b4] ml-1">(₱{a.currentPrice.toFixed(2)} x {addons[a.name.toLowerCase()]} pcs)</span>
-                </span>
-                <span className="font-medium">₱{(a.currentPrice * Number(addons[a.name.toLowerCase()])).toFixed(2)}</span>
-              </div>
-            ))}
+    const payload = {
+      reference_number: nextReference,
+      collection_option: "pickedUpDelivered",
+      service_details: {
+        services,
+        selectedServices,
+        weight,
+        numberOfBags,
+        bagDescription,
+        selectedLoads: Array.isArray(selectedLoads) ? selectedLoads : [selectedLoads],
+        loadQuantities,
+        selectedLoadDetails: fallbackLaundryRows.map(({ id, label, price, quantity }) => ({
+          id,
+          label,
+          price,
+          quantity,
+        })),
+        availableServices, // Cache prices for historical accuracy
+            },
+      collection_details: {
+        option: "pickedUpDelivered",
+        optionLabel: "Pickup & Delivery",
+        collectionDate: collectionInfo.date || "",
+        collectionTime: collectionInfo.time || "",
+        collectionSlot: collectionInfo.collectionSlot || null,
+        deliveryDate: deliveryInfo.date || "",
+        deliveryTime: deliveryInfo.time || "",
+        deliverySlot: deliveryInfo.deliverySlot || null,
+        pickupAddress: finalPickup,
+        deliveryAddress: finalDelivery,
+        customerAddress: customerLocation?.address || null,
+        lat: customerLocation?.lat || null,
+        lng: customerLocation?.lng || null,
+      },
+      payment_details: {
+        method: paymentMethod === "gcash" ? "GCash" : "Cash",
+        referenceNumber: paymentMethod === "gcash" ? "" : "-",
+        status: paymentMethod === "gcash" ? "For confirmation" : "Pay on collection",
+        totalAmount: calculateTotal(),
+        downpaymentRequired: 0,
+        amountToPay: calculateTotal(), // Full payment via GCash
+        balance: 0,
+      },
+      notes: notes || "",
+    };
 
-            <div className="border-t border-[#b4b4b4]/30 my-2 pt-2 flex justify-between text-[#4bad40]">
-              <span className="font-semibold">Total Amount To Pay:</span>
-              <span className="font-bold text-base">₱{calculateTotal().toFixed(2)}</span>
-            </div>
-          </div>
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-          {/* Add-Ons */}
-          <h4 className="font-semibold mt-4 mb-1">Add-Ons</h4>
-          {availableAddons.filter(a => Number(addons[a.name.toLowerCase()]) > 0).length > 0 ? (
-            <ul className="list-disc list-inside text-sm">
-              {availableAddons.filter(a => Number(addons[a.name.toLowerCase()]) > 0).map(a => (
-                <li key={a.id}>
-                  {a.name}: {addons[a.name.toLowerCase()]} pcs (₱{(a.currentPrice * addons[a.name.toLowerCase()]).toFixed(2)})
-                  {a.estimatedHours > 0 && <span className="ml-1 text-[10px] text-gray-500 italic">- ~{a.estimatedHours} hrs ea.</span>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-sm">None</div>
-          )}
+      if (!token) {
+        throw new Error("No authentication token found");
+      }
 
-          {/* No. of Bags & Description */}
-          <h4 className="font-semibold mt-4 mb-1">
-            Laundry Details
-          </h4>
-          <div className="text-sm space-y-1">
-            <div className="flex justify-between">
-              <span>No. of Bags/Loads:</span>
-              <span className="font-bold">{numberOfBags}</span>
-            </div>
-            {bagDescription && (
-              <div className="text-xs italic text-[#3878c2]">
-                "{bagDescription}"
-              </div>
-            )}
-          </div>
-        </div>
+      const url = isEditMode 
+        ? `${import.meta.env.VITE_API_URL}/api/v1/customer/my-bookings/${editId}/update` 
+        : `${import.meta.env.VITE_API_URL}/api/v1/customer/book`;
+      
+      const method = isEditMode ? "PATCH" : "POST";
 
-        {/* Collection & Delivery */}
-        <div className="p-4 border rounded bg-[#ffffff] shadow-sm">
-          <h3 className="font-semibold mb-4">Collection & Delivery</h3>
-          <div className="text-s mb-3">
-            <span className="font-medium">Mode:</span> {collectionInfo.optionLabel || "-"}
-          </div>
+      console.log("Booking request:", { url, method, payload });
 
-          {/* Collection */}
-          <div className="mb-3">
-            <div className="text-s font-semibold text-[#3878c2] mb-1">
-              Pickup
-            </div>
-            <div className="flex items-center gap-2 mb-1 text-sm">
-              <CalendarIcon />
-              <span>{formatDate(collectionInfo.date)}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <ClockIcon />
-              <span>{formatTime(collectionInfo.time)}</span>
-            </div>
-          </div>
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-          <hr className="border-t border-[#3878c2] my-3" />
+      console.log("Booking response:", response.status, response.statusText);
 
-          {/* Delivery */}
-          <div className="mb-3">
-            <div className="text-s font-semibold text-[#3878c2] mb-1">
-              Drop-Off
-            </div>
-            <div className="flex items-center gap-2 mb-1 text-sm">
-              <CalendarIcon />
-              <span>{formatDate(deliveryInfo.date)}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <ClockIcon />
-              <span>{formatTime(deliveryInfo.time)}</span>
-            </div>
-          </div>
-        </div>
+      if (response.ok) {
+        const result = await response.json();
+        console.log("Booking result:", result);
+        const ref = isEditMode ? editId : (result.booking?.reference_number || nextReference);
+        
+        if (isEditMode) {
+          showToast("Booking updated successfully.", "success");
+          if (onEditSuccess) {
+            onEditSuccess();
+          } else {
+            navigate(`/bookings/${editId}`);
+          }
+          return;
+        }
 
-        {/* Special Instructions */}
-        <div className="p-4 border rounded bg-[#ffffff] shadow-sm md:col-span-2">
-          <h3 className="font-semibold mb-2">Special Instructions</h3>
-          <textarea
-            placeholder="Notes or requests for your laundry"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            className="w-full p-2 border rounded text-[#3878c2] bg-white placeholder-[#b4b4b4] focus:outline-none focus:ring-1 focus:ring-[#3878c2]"
-            rows={3}
-          />
-        </div>
-      </div>
-
-
-      {/* Buttons */}
-      <div className="flex items-center justify-between gap-3 mt-6">
-        <button
-          onClick={onBack}
-          className="px-4 py-2 border-[0.5px] border-[#4bad40] rounded text-[#4bad40] bg-[#ffffff]"
-        >
-          Back
-        </button>
-        <button
-          onClick={async () => {
-            if (isSubmitting) return; // Prevent spam clicking
-            setIsSubmitting(true);
-            
-            const nextReference = isEditMode ? editId : generateReferenceNumber();
-            const nextPaymentReference = "";
-
-            // Build the booking payload
-            const selectedServices = Object.entries(services)
-              .filter(([, isSelected]) => Boolean(isSelected))
-              .map(([serviceName]) => serviceName);
-
-            const selectedAddons = Object.entries(addons)
-              .filter(([, quantity]) => Number(quantity) > 0)
-              .map(([addonName, quantity]) => ({ name: addonName, quantity }));
-
-            const routeAddresses = getRouteAddresses(collectionInfo.option);
-            
-            // Override with precise locations if applicable
-            let finalPickup = routeAddresses.pickupAddress;
-            let finalDelivery = routeAddresses.deliveryAddress;
-            
-            if (collectionInfo.option === "pickedUpDelivered") {
-               finalPickup = customerLocation?.address || routeAddresses.pickupAddress;
-               finalDelivery = customerLocation?.address || routeAddresses.deliveryAddress;
-            } else if (collectionInfo.option === "dropOffDelivered") {
-               finalDelivery = customerLocation?.address || routeAddresses.deliveryAddress;
-            }
-
-            const payload = {
-              reference_number: nextReference,
-              collection_option: collectionInfo.option || "dropOffPickUpLater",
-              service_details: {
-                services,
-                selectedServices,
-                addons,
-                selectedAddons,
-                weight,
-                numberOfBags,
-                bagDescription,
-                availableServices, // Cache prices for historical accuracy
-                availableAddons,
+        // If non-edit mode and user wants to save their address, store it in their profile
+        if (saveHomeAddress && customerLocation?.lat) {
+          try {
+            await fetch(`${import.meta.env.VITE_API_URL}/api/v1/customer/profile`, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
               },
-              collection_details: {
-                option: collectionInfo.option || "dropOffPickUpLater",
-                optionLabel: collectionInfo.optionLabel || "Drop-off & Pick up later",
-                collectionDate: collectionInfo.date || "",
-                collectionTime: collectionInfo.time || "",
-                deliveryDate: deliveryInfo.date || "",
-                deliveryTime: deliveryInfo.time || "",
-                pickupAddress: finalPickup,
-                deliveryAddress: finalDelivery,
-                customerAddress: customerLocation?.address || null,
-                lat: customerLocation?.lat || null,
-                lng: customerLocation?.lng || null,
-              },
-              payment_details: {
-                method: paymentMethod === "gcash" ? "GCash" : "Cash",
-                referenceNumber: paymentMethod === "gcash" ? "" : "-",
-                status: paymentMethod === "gcash" ? "For confirmation" : "Pay on collection",
-                totalAmount: calculateTotal(),
-                downpaymentRequired: 0,
-                amountToPay: calculateTotal(), // Full payment via GCash
-                balance: 0,
-              },
-              notes: notes || "",
-            };
+              body: JSON.stringify({
+                address: customerLocation.address,
+                lat: customerLocation.lat,
+                lng: customerLocation.lng,
+              })
+            });
+          } catch (e) {
+            console.error("Failed to save home address to profile:", e);
+          }
+        }
 
-            try {
-              const { data: { session } } = await supabase.auth.getSession();
-              const token = session?.access_token;
+         setBookingStatus("success");
+         setReferenceNumber(ref);
+         setPaymentReference(nextPaymentReference);
+         try {
+           clearBookingState(); // Clear saved state on success
+         } catch (clearError) {
+           console.error("Error clearing booking state:", clearError);
+         }
+       } else {
+        const errData = await response.json().catch(() => ({}));
+        console.error("Booking request failed:", errData.error || response.statusText);
+        setBookingStatus("error");
+        setBackendError(errData.error || "Please try again.");
+        setReferenceNumber("");
+        setPaymentReference("");
+      }
+    } catch (err) {
+      console.error("Booking request error:", err);
+      setBookingStatus("error");
+      setBackendError("An unexpected error occurred. Please try again.");
+      setReferenceNumber("");
+      setPaymentReference("");
+    } finally {
+      setIsSubmitting(false);
+    }
 
-              if (!token) {
-                throw new Error("No authentication token found");
-              }
+    setIsSuccessOpen(true);
+  };
 
-              const url = isEditMode 
-                ? `${import.meta.env.VITE_API_URL}/api/v1/customer/my-bookings/${editId}/update` 
-                : `${import.meta.env.VITE_API_URL}/api/v1/customer/book`;
-              
-              const method = isEditMode ? "PATCH" : "POST";
+  const displayAddress = customerLocation?.address || "-";
+  const displayNotesLength = notes?.length || 0;
+  const totalAmount = calculateTotal();
 
-              console.log("Booking request:", { url, method, payload });
-
-              const response = await fetch(url, {
-                method,
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(payload),
-              });
-
-              console.log("Booking response:", response.status, response.statusText);
-
-              if (response.ok) {
-                const result = await response.json();
-                console.log("Booking result:", result);
-                const ref = isEditMode ? editId : (result.booking?.reference_number || nextReference);
-                
-                if (isEditMode) {
-                  showToast("Booking updated successfully.", "success");
-                  if (onEditSuccess) {
-                    onEditSuccess();
-                  } else {
-                    navigate(`/bookings/${editId}`);
-                  }
-                  return;
-                }
-
-                // If non-edit mode and user wants to save their address, store it in their profile
-                if (saveHomeAddress && customerLocation?.lat) {
-                  try {
-                    await fetch(`${import.meta.env.VITE_API_URL}/api/v1/customer/profile`, {
-                      method: "PUT",
-                      headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                      },
-                      body: JSON.stringify({
-                        address: customerLocation.address,
-                        lat: customerLocation.lat,
-                        lng: customerLocation.lng,
-                      })
-                    });
-                  } catch (e) {
-                    console.error("Failed to save home address to profile:", e);
-                  }
-                }
-
-                 setBookingStatus("success");
-                 setReferenceNumber(ref);
-                 setPaymentReference(nextPaymentReference);
-                 try {
-                   clearBookingState(); // Clear saved state on success
-                 } catch (clearError) {
-                   console.error("Error clearing booking state:", clearError);
-                 }
-               } else {
-                const errData = await response.json().catch(() => ({}));
-                console.error("Booking request failed:", errData.error || response.statusText);
-                setBookingStatus("error");
-                setBackendError(errData.error || "Please try again.");
-                setReferenceNumber("");
-                setPaymentReference("");
-              }
-            } catch (err) {
-              console.error("Booking request error:", err);
-              setBookingStatus("error");
-              setBackendError("An unexpected error occurred. Please try again.");
-              setReferenceNumber("");
-              setPaymentReference("");
-            } finally {
-              setIsSubmitting(false);
-            }
-
-            setIsSuccessOpen(true);
+  const SectionCard = ({ label, children }) => (
+    <section
+      style={{
+        background: '#fff',
+        borderRadius: '1rem',
+        border: '1px solid rgba(99,188,230,0.28)',
+        boxShadow: '0 2px 14px rgba(56,120,194,0.07)',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '0.875rem 1.375rem',
+          borderBottom: '1px solid #f3f4f6',
+        }}
+      >
+        <span
+          style={{
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: '#9ca3af',
           }}
-          disabled={isSubmitting}
-          className={`px-4 py-2 rounded text-white transition-colors ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#4bad40] hover:bg-[#3f9136]'}`}
         >
-          {isSubmitting ? (isEditMode ? "Updating..." : "Confirming...") : (isEditMode ? "Update Booking" : "Confirm Booking")}
-        </button>
+          {label}
+        </span>
+      </div>
+      <div style={{ padding: '1.25rem 1.375rem' }}>
+        {children}
+      </div>
+    </section>
+  );
+
+  const Row = ({ label, value }) => (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '0.375rem 0',
+        fontSize: '0.9375rem',
+      }}
+    >
+      <span style={{ color: '#6b7280', fontWeight: 500 }}>{label}</span>
+      <span style={{ color: '#1f2937', fontWeight: 700, textAlign: 'right' }}>{value || '-'}</span>
+    </div>
+  );
+
+  return (
+    <div
+      className="min-h-screen"
+      style={{
+        background: '#EFF8FC',
+        fontFamily: 'Inter, sans-serif',
+        minHeight: '100vh',
+      }}
+    >
+      <div className="max-w-3xl mx-auto px-6 py-10" style={{ maxWidth: 768, margin: '0 auto', padding: '2.5rem 1.5rem' }}>
+        <div className="mb-8" style={{ marginBottom: '2rem' }}>
+          <BookNowStepTitle>Review &amp; Confirm</BookNowStepTitle>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <SectionCard label="Laundry Details">
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1.5fr 0.6fr 0.9fr',
+                gap: 12,
+                paddingBottom: 10,
+                borderBottom: '1px solid #e5e7eb',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                color: '#374151',
+              }}
+            >
+              <span>Load Type</span>
+              <span style={{ textAlign: 'center' }}>Qty</span>
+              <span style={{ textAlign: 'right' }}>Subtotal</span>
+            </div>
+
+            {fallbackLaundryRows.map((option) => {
+              const subtotal = option.price * option.quantity;
+
+              return (
+                <div
+                  key={option.id}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1.5fr 0.6fr 0.9fr',
+                    gap: 12,
+                    padding: '0.75rem 0',
+                    borderBottom: '1px solid #f3f4f6',
+                    fontSize: '0.875rem',
+                    color: '#6b7280',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span>{option.label}</span>
+                  <span style={{ textAlign: 'center' }}>{option.quantity}</span>
+                  <span style={{ textAlign: 'right' }}>₱{subtotal}</span>
+                </div>
+              );
+            })}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12 }}>
+              <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#374151' }}>Total</span>
+              <span style={{ fontSize: '2rem', fontWeight: 800, color: '#3878c2', letterSpacing: '-0.03em' }}>
+                ₱{totalAmount}
+              </span>
+            </div>
+          </SectionCard>
+
+          <SectionCard label="Laundry Bag & Items Description">
+            <p
+              style={{
+                fontSize: '0.9375rem',
+                color: '#1f2937',
+                fontWeight: 500,
+                marginBottom: 0,
+              }}
+            >
+              {bagDescription || "No description provided."}
+            </p>
+          </SectionCard>
+
+          <div
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '1rem',
+            }}
+          >
+            <SectionCard label="Pickup Schedule">
+              <Row label="Date" value={formatDate(collectionInfo.date)} />
+              <Row label="Time" value={formatTime(collectionInfo.time)} />
+            </SectionCard>
+
+            <SectionCard label="Delivery Schedule">
+              <Row label="Date" value={formatDate(deliveryInfo.date)} />
+              <Row label="Time" value={formatTime(deliveryInfo.time)} />
+            </SectionCard>
+          </div>
+
+          <SectionCard label="Address Details">
+            <p
+              style={{
+                fontSize: '0.9375rem',
+                color: '#1f2937',
+                fontWeight: 500,
+                marginBottom: 0,
+              }}
+            >
+              {displayAddress}
+            </p>
+
+            <div style={{ marginTop: '1rem' }}>
+              <div
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: 220,
+                  borderRadius: '0.875rem',
+                  overflow: 'hidden',
+                  border: '1px solid rgba(99,188,230,0.28)',
+                  background: '#e5e7eb',
+                }}
+              >
+                <iframe
+                  title="Pinned delivery location"
+                  src={`https://www.google.com/maps?q=${encodeURIComponent(displayAddress)}&output=embed`}
+                  width="100%"
+                  height="100%"
+                  style={{
+                    border: 0,
+                    pointerEvents: 'none',
+                    filter: 'saturate(0.95)',
+                  }}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+
+        <div style={{ marginTop: '1.5rem' }}>
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '1rem',
+              border: '1px solid rgba(99,188,230,0.28)',
+              boxShadow: '0 2px 14px rgba(56,120,194,0.07)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '0.875rem 1.375rem',
+                borderBottom: '1px solid #f3f4f6',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: '#9ca3af',
+                }}
+              >
+                Special Instructions
+              </span>
+            </div>
+
+            <div style={{ padding: '1.25rem 1.375rem' }}>
+
+              <BookNowLimitedTextBox
+                as="textarea"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Notes or requests for your laundry"
+                rows={4}
+              />
+
+              <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: 6 }}>
+                Optional • Up to 500 characters
+              </p>
+
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+            paddingTop: 28,
+            paddingBottom: 48,
+          }}
+        >
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              padding: '0.75rem 2rem',
+              border: '1.5px solid #d1d5db',
+              borderRadius: '0.625rem',
+              fontWeight: 600,
+              color: '#6b7280',
+              background: '#fff',
+              cursor: 'pointer',
+              fontSize: '0.9375rem',
+              fontFamily: 'Inter, sans-serif',
+            }}
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            onClick={submitBooking}
+            disabled={isSubmitting}
+            style={{
+              padding: '0.75rem 2.25rem',
+              border: 'none',
+              borderRadius: '0.625rem',
+              fontWeight: 700,
+              color: '#fff',
+              background: isSubmitting ? '#9ca3af' : '#4bad40',
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              fontSize: '0.9375rem',
+              fontFamily: 'Inter, sans-serif',
+              letterSpacing: '-0.01em',
+            }}
+          >
+            {isSubmitting ? (isEditMode ? "Updating..." : "Confirming...") : (isEditMode ? "Update Booking" : "Confirm Booking")}
+          </button>
+        </div>
       </div>
 
       {isSuccessOpen && (
