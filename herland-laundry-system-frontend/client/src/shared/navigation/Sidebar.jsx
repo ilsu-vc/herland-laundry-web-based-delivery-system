@@ -29,14 +29,14 @@ const visitorSections = [
     title: 'GET STARTED',
     items: [
       { label: 'Login', path: '/login', icon: 'login' },
-      { label: 'Register', path: '/register', icon: 'register' },
+      { label: 'Register', path: '/signup', icon: 'register' },
     ],
   },
   {
     title: 'SUPPORT',
     items: [
-      { label: 'FAQs', path: '/landing', sectionId: 'faqs', icon: 'question' },
-      { label: 'Contact Us', path: '/landing', sectionId: 'contact-us', icon: 'contact' },
+      { label: 'FAQs', path: '/landing', sectionId: 'faq', icon: 'question' },
+      { label: 'Contact Us', path: '/landing', sectionId: 'contact', icon: 'contact' },
     ],
   },
 ];
@@ -45,8 +45,7 @@ const customerSections = [
   {
     title: 'MAIN',
     items: [
-      { label: 'Home', path: '/user', icon: 'home' },
-      { label: 'Book Now', path: '/user/book-now', icon: 'bookNow' },
+      { label: 'Book Now', path: '/book', icon: 'bookNow' },
       { label: 'My Bookings', path: '/user/bookings', icon: 'bookings' },
     ],
   },
@@ -54,7 +53,7 @@ const customerSections = [
     title: 'UPDATES',
     items: [
       { label: 'Notifications', path: '/user/notifications', icon: 'bell', showBadge: true },
-      { label: 'Chat With Us', path: '/user/chat', icon: 'chat' },
+      { label: 'Chat With Us', path: 'viber://chat?number=%2B639272276218', icon: 'chat', external: true },
     ],
   },
   {
@@ -70,15 +69,14 @@ const staffSections = [
   {
     title: 'MAIN',
     items: [
-      { label: 'Home', path: '/dashboard', icon: 'home' },
-      { label: 'Dashboard', path: '/dashboard', icon: 'dashboard' },
-      { label: 'Manage Bookings', path: '/dashboard/bookings', icon: 'bookings' },
+      { label: 'Dashboard', path: '/staff', icon: 'dashboard' },
+      { label: 'Manage Bookings', path: '/staff/manage-bookings', icon: 'bookings' },
     ],
   },
   {
     title: 'UPDATES',
     items: [
-      { label: 'Notifications', path: '/dashboard/notifications', icon: 'bell', showBadge: true },
+      { label: 'Notifications', path: '/staff/notifications', icon: 'bell', showBadge: true },
     ],
   },
   {
@@ -94,15 +92,14 @@ const riderSections = [
   {
     title: 'MAIN',
     items: [
-      { label: 'Home', path: '/rider', icon: 'home' },
       { label: 'Dashboard', path: '/rider/dashboard', icon: 'dashboard' },
     ],
   },
   {
     title: 'TASKS',
     items: [
-      { label: 'Active Tasks', path: '/rider/tasks/active', icon: 'bookings' },
-      { label: 'Completed Tasks', path: '/rider/tasks/completed', icon: 'completedTasks' },
+      { label: 'Manage Tasks', path: '/rider/manage-tasks', icon: 'bookings' },
+      { label: 'Completed Tasks', path: '/rider/completed-tasks', icon: 'completedTasks' },
     ],
   },
   {
@@ -124,19 +121,19 @@ const adminSections = [
   {
     title: 'MAIN',
     items: [
-      { label: 'Home', path: '/dashboard', icon: 'home' },
-      { label: 'Dashboard', path: '/dashboard', icon: 'dashboard' },
-      { label: 'Manage Bookings', path: '/dashboard/bookings', icon: 'bookings' },
-      { label: 'Manage Services', path: '/dashboard/services', icon: 'manageServices' },
-      { label: 'Reports', path: '/dashboard/reports', icon: 'reports' },
+      { label: 'Dashboard', path: '/admin', icon: 'dashboard' },
+      { label: 'Manage Bookings', path: '/admin/manage-bookings', icon: 'bookings' },
+      { label: 'Manage Services', path: '/admin/manage-services', icon: 'manageServices' },
+      { label: 'Reports', path: '/admin/reports', icon: 'reports' },
+      { label: 'Feedback Reports', path: '/admin/feedback-reports', icon: 'feedbackReports' },
     ],
   },
   {
     title: 'PEOPLE',
     items: [
-      { label: 'Manage Admins', path: '/dashboard/admins', icon: 'manageAdmins' },
-      { label: 'Manage Employees', path: '/dashboard/employees', icon: 'manageEmployees' },
-      { label: 'Manage Users', path: '/dashboard/users', icon: 'manageUsers' },
+      { label: 'Manage Admins', path: '/admin/manage-admins', icon: 'manageAdmins' },
+      { label: 'Manage Employees', path: '/admin/manage-employees', icon: 'manageEmployees' },
+      { label: 'Manage Users', path: '/admin/manage-users', icon: 'manageUsers' },
     ],
   },
   {
@@ -158,6 +155,10 @@ function getSectionsByRole(role, hasSession) {
   if (normalizedRole === 'staff' || normalizedRole === 'employee') return staffSections;
 
   return customerSections;
+}
+
+function getItemKey(sectionTitle, item) {
+  return `${sectionTitle}-${item.label}`;
 }
 
 export default function Sidebar({
@@ -183,17 +184,30 @@ export default function Sidebar({
     role: 'Customer',
   });
   const [unreadCount, setUnreadCount] = useState(0);
+  const [activeItemKey, setActiveItemKey] = useState('');
 
   const hasSession = Boolean(session);
+  const isVisitorSidebar = !hasSession;
   const isCollapsed = collapsed ?? internalCollapsed;
   const isDrawer = typeof isOpen === 'boolean';
   const isVisible = isDrawer ? isOpen : true;
-  const isRightSide = side === 'right';
+  const effectiveSide = isVisitorSidebar ? 'right' : side;
+  const isRightSide = effectiveSide === 'right';
 
   const navSections = useMemo(() => {
     const role = userProfile.role || activeRole;
     return getSectionsByRole(role, hasSession);
   }, [userProfile.role, activeRole, hasSession]);
+
+  const flatNavItems = useMemo(() => {
+    return navSections.flatMap((section) =>
+      section.items.map((item) => ({
+        ...item,
+        key: getItemKey(section.title, item),
+        sectionTitle: section.title,
+      }))
+    );
+  }, [navSections]);
 
   useEffect(() => {
     let isMounted = true;
@@ -252,6 +266,64 @@ export default function Sidebar({
     window.addEventListener('notificationsUpdated', handleNotificationsUpdated);
     return () => window.removeEventListener('notificationsUpdated', handleNotificationsUpdated);
   }, [session?.access_token]);
+
+  useEffect(() => {
+    setActiveItemKey((currentKey) => {
+      const currentItem = flatNavItems.find((item) => item.key === currentKey);
+
+      if (currentItem && doesItemMatchLocation(currentItem)) {
+        return currentKey;
+      }
+
+      const exactMatch = flatNavItems.find(
+        (item) =>
+          !item.action &&
+          !item.sectionId &&
+          item.path === location.pathname
+      );
+
+      if (exactMatch) {
+        return exactMatch.key;
+      }
+
+      const prefixMatches = flatNavItems
+        .filter(
+          (item) =>
+            !item.action &&
+            !item.sectionId &&
+            item.path &&
+            location.pathname.startsWith(`${item.path}/`)
+        )
+        .sort((a, b) => b.path.length - a.path.length);
+
+      if (prefixMatches.length > 0) {
+        return prefixMatches[0].key;
+      }
+
+      const sectionMatch = flatNavItems.find(
+        (item) =>
+          !item.action &&
+          item.sectionId &&
+          item.path === location.pathname
+      );
+
+      return sectionMatch?.key || '';
+    });
+  }, [location.pathname, flatNavItems]);
+
+  function doesItemMatchLocation(item) {
+    if (!item.path) return false;
+
+    if (item.sectionId) {
+      return location.pathname === item.path;
+    }
+
+    if (item.path === '/dashboard' || item.path === '/user' || item.path === '/rider') {
+      return location.pathname === item.path;
+    }
+
+    return location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+  }
 
   async function loadProfile(accessToken) {
     try {
@@ -318,12 +390,18 @@ export default function Sidebar({
       role: 'Customer',
     });
     setUnreadCount(0);
+    setActiveItemKey('');
 
     navigate('/login');
     onClose();
   }
 
   function handleToggle() {
+    if (isDrawer && isVisible) {
+      onClose();
+      return;
+    }
+
     if (onToggle) {
       onToggle();
       return;
@@ -343,9 +421,17 @@ export default function Sidebar({
     }
   }
 
-  function handleItemClick(item) {
+  function handleItemClick(sectionTitle, item) {
     if (item.action === 'logout') {
       handleLogout();
+      return;
+    }
+
+    setActiveItemKey(getItemKey(sectionTitle, item));
+
+    if (item.external) {
+      window.location.href = item.path;
+      onClose();
       return;
     }
 
@@ -370,18 +456,8 @@ export default function Sidebar({
     onClose();
   }
 
-  function isItemActive(item) {
-    if (!item.path) return false;
-
-    if (item.sectionId) {
-      return location.pathname === item.path;
-    }
-
-    if (item.path === '/dashboard' || item.path === '/user' || item.path === '/rider') {
-      return location.pathname === item.path;
-    }
-
-    return location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+  function isItemActive(sectionTitle, item) {
+    return activeItemKey === getItemKey(sectionTitle, item);
   }
 
   return (
@@ -389,8 +465,8 @@ export default function Sidebar({
       {isDrawer && (
         <div
           className={`fixed inset-0 bg-black/30 transition-opacity duration-300 ${
-            isVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
-          }`}
+            isVisitorSidebar ? 'lg:hidden' : ''
+          } ${isVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
           style={{ zIndex: 39 }}
           onClick={onClose}
         />
@@ -399,7 +475,7 @@ export default function Sidebar({
       <div
         className={`fixed top-0 h-screen flex flex-col transition-all duration-300 ease-in-out ${
           isRightSide ? 'right-0' : 'left-0'
-        } ${className}`}
+        } ${isVisitorSidebar ? 'lg:hidden' : ''} ${className}`}
         style={{
           width: isCollapsed ? '72px' : '256px',
           background: Colors.white,
@@ -440,8 +516,9 @@ export default function Sidebar({
                 onClose();
               }}
               title={isCollapsed ? userProfile.name || 'My Profile' : undefined}
-              className="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
+              className="w-full flex items-center rounded-xl transition-all duration-150"
               style={{
+                gap: isCollapsed ? '0px' : '12px',
                 padding: isCollapsed ? '10px 0' : '10px 12px',
                 justifyContent: isCollapsed ? 'center' : 'flex-start',
                 background: Colors.skyFaint,
@@ -469,6 +546,7 @@ export default function Sidebar({
               <div
                 className="min-w-0 text-left overflow-hidden transition-all duration-300"
                 style={{
+                  display: isCollapsed ? 'none' : 'block',
                   maxWidth: isCollapsed ? '0px' : '160px',
                   opacity: isCollapsed ? 0 : 1,
                 }}
@@ -520,15 +598,16 @@ export default function Sidebar({
 
               <div className="space-y-1">
                 {section.items.map((item) => {
-                  const active = isItemActive(item);
+                  const active = isItemActive(section.title, item);
 
                   return (
                     <button
                       key={`${section.title}-${item.label}`}
-                      onClick={() => handleItemClick(item)}
+                      onClick={() => handleItemClick(section.title, item)}
                       title={isCollapsed ? item.label : undefined}
-                      className="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
+                      className="w-full flex items-center rounded-xl transition-all duration-150"
                       style={{
+                        gap: isCollapsed ? '0px' : '12px',
                         padding: isCollapsed ? '10px 0' : '10px 12px',
                         justifyContent: isCollapsed ? 'center' : 'flex-start',
                         background: active ? Colors.skyFaint : 'transparent',
@@ -556,6 +635,7 @@ export default function Sidebar({
                       <span
                         className="overflow-hidden whitespace-nowrap transition-all duration-300 flex-1 text-left"
                         style={{
+                          display: isCollapsed ? 'none' : 'block',
                           maxWidth: isCollapsed ? '0px' : '160px',
                           opacity: isCollapsed ? 0 : 1,
                         }}
@@ -593,8 +673,9 @@ export default function Sidebar({
             <button
               onClick={handleToggle}
               title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className="w-full flex items-center gap-3 rounded-xl transition-all duration-150"
+              className="w-full flex items-center rounded-xl transition-all duration-150"
               style={{
+                gap: isCollapsed ? '0px' : '12px',
                 padding: isCollapsed ? '10px 0' : '10px 12px',
                 justifyContent: isCollapsed ? 'center' : 'flex-start',
                 background: 'transparent',
@@ -616,6 +697,7 @@ export default function Sidebar({
               <span
                 className="overflow-hidden whitespace-nowrap transition-all duration-300"
                 style={{
+                  display: isCollapsed ? 'none' : 'block',
                   maxWidth: isCollapsed ? '0px' : '160px',
                   opacity: isCollapsed ? 0 : 1,
                 }}

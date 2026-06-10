@@ -1,53 +1,342 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { formatDate, formatTime, getRouteAddresses } from '../../shared/utils/formatters'
+import { formatDate, formatTime } from '../../shared/utils/formatters'
 import { supabase } from '../../lib/supabase'
-import { useToast } from '../../shared/components/Toast'
-import { useConfirm } from '../../shared/components/ConfirmationModal'
 
+const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/rider`
 
+const C = {
+	blue:      '#3878c2',
+	green:     '#4bad40',
+	sky:       '#63bce6',
+	bg:        '#EFF8FC',
+	skyBd:     'rgba(99,188,230,0.28)',
+	blueMuted: '#6b8bae',
+	white:     '#ffffff',
+	red:       '#e55353',
+}
+
+const STATUS_META = {
+	'Rider Dispatched for Pickup': {
+		label: 'Pickup',
+		type: 'Pickup',
+		color: C.blue,
+		bg: 'rgba(56,120,194,0.1)',
+	},
+	'Out for Delivery': {
+		label: 'Delivery',
+		type: 'Delivery',
+		color: C.green,
+		bg: 'rgba(75,173,64,0.1)',
+	},
+	'Delivered': {
+		label: 'Delivery',
+		type: 'Delivery',
+		color: C.blueMuted,
+		bg: 'rgba(107,139,174,0.1)',
+	},
+	'Picked Up': {
+		label: 'Pickup',
+		type: 'Pickup',
+		color: C.blueMuted,
+		bg: 'rgba(107,139,174,0.1)',
+	},
+}
+
+const FILTER_CHIPS = ['All', 'Pickup', 'Delivery']
+
+function InfoBlock({ label, address, date, time }) {
+	return (
+		<div>
+			<p style={{
+				fontSize: '0.65rem',
+				fontWeight: 800,
+				letterSpacing: '0.09em',
+				textTransform: 'uppercase',
+				color: C.blueMuted,
+				marginBottom: 5,
+			}}>
+				{label}
+			</p>
+
+			<p style={{
+				fontSize: '0.875rem',
+				color: '#1f2937',
+				fontWeight: 500,
+				lineHeight: 1.4,
+			}}>
+				{address || '-'}
+			</p>
+
+			{(date || time) && (
+				<p style={{
+					fontSize: '0.75rem',
+					color: C.blue,
+					marginTop: 4,
+					fontWeight: 600,
+				}}>
+					{date ? formatDate(date) : ''}
+					{date && time ? ' • ' : ''}
+					{time ? formatTime(time) : ''}
+				</p>
+			)}
+		</div>
+	)
+}
+
+function FilterChips({ selected, onChange, counts }) {
+	return (
+		<div style={{
+			display: 'flex',
+			gap: 8,
+			padding: '14px 20px',
+			width: '100%',
+			boxSizing: 'border-box',
+		}}>
+			{FILTER_CHIPS.map(chip => {
+				const active = selected === chip
+
+				return (
+					<button
+						key={chip}
+						onClick={() => onChange(chip)}
+						style={{
+							padding: '5px 16px',
+							borderRadius: '2rem',
+							border: active ? `1.5px solid ${C.blue}` : `1.5px solid ${C.skyBd}`,
+							background: active ? 'rgba(56,120,194,0.1)' : C.white,
+							color: active ? C.blue : C.blueMuted,
+							fontSize: '0.8125rem',
+							fontWeight: active ? 700 : 500,
+							cursor: 'pointer',
+							fontFamily: 'inherit',
+							transition: 'all 0.15s',
+							display: 'flex',
+							alignItems: 'center',
+							gap: 6,
+						}}
+					>
+						{chip}
+
+						<span style={{
+							fontSize: '0.6875rem',
+							fontWeight: 800,
+							background: active ? 'rgba(56,120,194,0.14)' : 'rgba(107,139,174,0.1)',
+							color: active ? C.blue : C.blueMuted,
+							borderRadius: '2rem',
+							padding: '1px 6px',
+							minWidth: 20,
+							textAlign: 'center',
+						}}>
+							{counts?.[chip] || 0}
+						</span>
+					</button>
+				)
+			})}
+		</div>
+	)
+}
+
+function getListFromResponse(data) {
+	if (Array.isArray(data)) return data
+	if (Array.isArray(data?.bookings)) return data.bookings
+	if (Array.isArray(data?.data)) return data.data
+	if (Array.isArray(data?.tasks)) return data.tasks
+	return []
+}
+
+function getFallbackAddresses(collectionDetails = {}) {
+	const option = collectionDetails.option || collectionDetails.collectionOption || ''
+
+	const pickupAddress =
+		collectionDetails.pickupAddress ||
+		collectionDetails.collectionAddress ||
+		collectionDetails.dropOffAddress ||
+		''
+
+	const deliveryAddress =
+		collectionDetails.customerAddress ||
+		collectionDetails.deliveryAddress ||
+		collectionDetails.pickupAddress ||
+		collectionDetails.collectionAddress ||
+		''
+
+	if (option === 'dropOffPickUpLater') {
+		return {
+			pickupAddress: 'Herland Laundry',
+			deliveryAddress,
+		}
+	}
+
+	if (option === 'pickupDelivery' || option === 'pickUpDelivery') {
+		return {
+			pickupAddress,
+			deliveryAddress,
+		}
+	}
+
+	if (option === 'pickupOnly' || option === 'pickUpOnly') {
+		return {
+			pickupAddress,
+			deliveryAddress: 'Herland Laundry',
+		}
+	}
+
+	return {
+		pickupAddress,
+		deliveryAddress,
+	}
+}
+
+function mapBookingData(booking) {
+	const collectionDetails = booking.collection_details || {}
+	const fallbackAddresses = getFallbackAddresses(collectionDetails)
+
+	return {
+		id: booking.reference_number || booking.id,
+		dbId: booking.id,
+		status: booking.status || '',
+		customerName: booking.customerName || booking.customer_name || booking.profiles?.full_name || 'Customer',
+
+		pickupAddress:
+			collectionDetails.pickupAddress ||
+			fallbackAddresses.pickupAddress ||
+			'-',
+
+		pickupDate:
+			collectionDetails.collectionDate ||
+			collectionDetails.pickupDate ||
+			collectionDetails.date ||
+			null,
+
+		pickupTime:
+			collectionDetails.collectionTime ||
+			collectionDetails.pickupTime ||
+			collectionDetails.time ||
+			null,
+
+		deliveryAddress:
+			collectionDetails.customerAddress ||
+			collectionDetails.deliveryAddress ||
+			fallbackAddresses.deliveryAddress ||
+			'-',
+
+		deliveryDate:
+			collectionDetails.deliveryDate ||
+			null,
+
+		deliveryTime:
+			collectionDetails.deliveryTime ||
+			null,
+
+		lat:
+			collectionDetails.lat ??
+			collectionDetails.latitude ??
+			null,
+
+		lng:
+			collectionDetails.lng ??
+			collectionDetails.longitude ??
+			null,
+
+		raw: booking,
+	}
+}
+
+function toDateOnly(value) {
+	if (!value) return ''
+
+	const date = new Date(value)
+
+	if (!Number.isNaN(date.getTime())) {
+		const year = date.getFullYear()
+		const month = String(date.getMonth() + 1).padStart(2, '0')
+		const day = String(date.getDate()).padStart(2, '0')
+
+		return `${year}-${month}-${day}`
+	}
+
+	return String(value).slice(0, 10)
+}
+
+function isTodayTask(booking) {
+	const today = toDateOnly(new Date())
+	const type = STATUS_META[booking.status]?.type || ''
+
+	if (type === 'Pickup') {
+		return toDateOnly(booking.pickupDate) === today
+	}
+
+	if (type === 'Delivery') {
+		return toDateOnly(booking.deliveryDate) === today
+	}
+
+	return toDateOnly(booking.pickupDate) === today || toDateOnly(booking.deliveryDate) === today
+}
+
+function getChipCounts(list) {
+	return {
+		All: list.length,
+		Pickup: list.filter((booking) => STATUS_META[booking.status]?.type === 'Pickup').length,
+		Delivery: list.filter((booking) => STATUS_META[booking.status]?.type === 'Delivery').length,
+	}
+}
 
 export default function ManageTasks() {
 	const navigate = useNavigate()
-	const { showToast } = useToast()
-	const confirm = useConfirm()
+
 	const [bookings, setBookings] = useState([])
 	const [availableBookings, setAvailableBookings] = useState([])
-	const [activeTab, setActiveTab] = useState('available') // 'available' or 'assigned'
+	const [activeTab, setActiveTab] = useState('available')
+	const [assignedFilter, setAssignedFilter] = useState('All')
+	const [availableFilter, setAvailableFilter] = useState('All')
 	const [loading, setLoading] = useState(true)
-	const [error, setError] = useState(null)
+	const [error, setError] = useState('')
 	const [expandedId, setExpandedId] = useState(null)
+	const [actionLoadingId, setActionLoadingId] = useState(null)
 
 	const fetchAll = async () => {
 		try {
 			setLoading(true)
-			const { data: { session } } = await supabase.auth.getSession()
+			setError('')
+
+			const {
+				data: { session },
+			} = await supabase.auth.getSession()
+
 			const token = session?.access_token
 
 			if (!token) {
-				setError('Please log in to view assigned bookings.')
-				setLoading(false)
-				return
+				throw new Error('You must be logged in as a rider to view tasks.')
 			}
 
-			// Fetch Available
-			const resAvailable = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/rider/available-bookings`, {
-				headers: { Authorization: `Bearer ${token}` },
-			})
-			const dataAvailable = resAvailable.ok ? await resAvailable.json() : []
+			const headers = {
+				Authorization: `Bearer ${token}`,
+			}
 
-			// Fetch Assigned
-			const resAssigned = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/rider/assigned-bookings`, {
-				headers: { Authorization: `Bearer ${token}` },
-			})
-			const dataAssigned = resAssigned.ok ? await resAssigned.json() : []
+			const [availableRes, assignedRes] = await Promise.all([
+				fetch(`${API_BASE}/available-bookings`, { headers }),
+				fetch(`${API_BASE}/assigned-bookings`, { headers }),
+			])
 
-			setAvailableBookings(dataAvailable)
-			setBookings(dataAssigned)
-			setError(null)
+			if (!availableRes.ok) {
+				const message = await availableRes.text()
+				throw new Error(message || 'Failed to fetch available tasks.')
+			}
+
+			if (!assignedRes.ok) {
+				const message = await assignedRes.text()
+				throw new Error(message || 'Failed to fetch assigned tasks.')
+			}
+
+			const availableData = await availableRes.json()
+			const assignedData = await assignedRes.json()
+
+			setAvailableBookings(getListFromResponse(availableData).map(mapBookingData))
+			setBookings(getListFromResponse(assignedData).map(mapBookingData))
 		} catch (err) {
-			console.error('Error fetching rider bookings:', err)
-			setError('Could not load bookings. Please try again later.')
+			console.error(err)
+			setError(err.message || 'Something went wrong while loading tasks.')
 		} finally {
 			setLoading(false)
 		}
@@ -57,297 +346,782 @@ export default function ManageTasks() {
 		fetchAll()
 	}, [])
 
-	const handleAccept = async (id) => {
-		try {
-			const { data: { session } } = await supabase.auth.getSession()
-			const token = session?.access_token
-			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/rider/accept/${id}`, {
-				method: 'PATCH',
-				headers: { Authorization: `Bearer ${token}` },
-			})
-			if (response.ok) {
-				await fetchAll()
-				setActiveTab('assigned')
-			} else {
-				const err = await response.json()
-				showToast(err.error || 'Failed to accept booking', 'error')
-			}
-		} catch (err) {
-			console.error('Accept error:', err)
-		}
-	}
+	const filter = activeTab === 'available' ? availableFilter : assignedFilter
+	const setFilter = activeTab === 'available' ? setAvailableFilter : setAssignedFilter
 
-	const handleDecline = async (id) => {
-		if (!(await confirm('Are you sure you want to decline this assignment? It will be hidden from your pool.'))) return
-		try {
-			const { data: { session } } = await supabase.auth.getSession()
-			const token = session?.access_token
-			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/rider/decline/${id}`, {
-				method: 'PATCH',
-				headers: { Authorization: `Bearer ${token}` },
-			})
-			if (response.ok) {
-				await fetchAll()
-			} else {
-				showToast('Failed to decline booking', 'error')
-			}
-		} catch (err) {
-			console.error('Decline error:', err)
-		}
-	}
+	const todaysAvailableBookings = useMemo(() => {
+		return availableBookings.filter(isTodayTask)
+	}, [availableBookings])
 
-	const mapBookingData = (dataList) => {
-		return dataList.map((booking, index) => {
-			const collectionDetails = booking.collection_details || {}
-			const fallbackRoute = getRouteAddresses(collectionDetails.option)
+	const todaysAssignedBookings = useMemo(() => {
+		return bookings.filter(isTodayTask)
+	}, [bookings])
 
-			return {
-				id: booking.reference_number || booking.id,
-				dbId: booking.id,
-				status: booking.status || '',
-				customerName: booking.customerName || 'Customer',
-				pickupAddress: collectionDetails.pickupAddress || fallbackRoute.pickupAddress,
-				pickupDate: collectionDetails.collectionDate || '',
-				pickupTime: collectionDetails.collectionTime || '',
-				deliveryAddress: collectionDetails.customerAddress || collectionDetails.deliveryAddress || fallbackRoute.deliveryAddress,
-				deliveryDate: collectionDetails.deliveryDate || '',
-				deliveryTime: collectionDetails.deliveryTime || '',
-				lat: collectionDetails.lat || null,
-				lng: collectionDetails.lng || null,
-			}
+	const currentBaseBookings = activeTab === 'available'
+		? todaysAvailableBookings
+		: todaysAssignedBookings
+
+	const chipCounts = useMemo(() => {
+		return getChipCounts(currentBaseBookings)
+	}, [currentBaseBookings])
+
+	const currentBookings = useMemo(() => {
+		if (filter === 'All') return currentBaseBookings
+
+		return currentBaseBookings.filter((booking) => {
+			const type = STATUS_META[booking.status]?.type || ''
+			return type === filter
 		})
-	}
-
-	const currentBookings = activeTab === 'available' 
-		? mapBookingData(availableBookings) 
-		: mapBookingData(bookings)
+	}, [currentBaseBookings, filter])
 
 	const selectedBooking = useMemo(
 		() => currentBookings.find((booking) => booking.id === expandedId) || null,
 		[currentBookings, expandedId]
 	)
 
-	const toggleExpand = (id) => setExpandedId((prev) => (prev === id ? null : id))
+	const meta = (booking) => {
+		return STATUS_META[booking.status] || {
+			label: booking.status || 'Task',
+			type: '',
+			color: C.blueMuted,
+			bg: 'rgba(107,139,174,0.1)',
+		}
+	}
+
+	const handleAccept = async (booking) => {
+		try {
+			setActionLoadingId(booking.dbId)
+			setError('')
+
+			const {
+				data: { session },
+			} = await supabase.auth.getSession()
+
+			const token = session?.access_token
+
+			if (!token) {
+				throw new Error('You must be logged in as a rider to accept tasks.')
+			}
+
+			const res = await fetch(`${API_BASE}/accept/${booking.dbId}`, {
+				method: 'PATCH',
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+			})
+
+			if (!res.ok) {
+				const message = await res.text()
+				throw new Error(message || 'Failed to accept task.')
+			}
+
+			setExpandedId(null)
+			await fetchAll()
+		} catch (err) {
+			console.error(err)
+			setError(err.message || 'Something went wrong while accepting the task.')
+		} finally {
+			setActionLoadingId(null)
+		}
+	}
+
+	const handleDecline = async (booking) => {
+		const confirmed = window.confirm('Are you sure you want to decline this task?')
+
+		if (!confirmed) return
+
+		try {
+			setActionLoadingId(booking.dbId)
+			setError('')
+
+			const {
+				data: { session },
+			} = await supabase.auth.getSession()
+
+			const token = session?.access_token
+
+			if (!token) {
+				throw new Error('You must be logged in as a rider to decline tasks.')
+			}
+
+			const res = await fetch(`${API_BASE}/decline/${booking.dbId}`, {
+				method: 'PATCH',
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+			})
+
+			if (!res.ok) {
+				const message = await res.text()
+				throw new Error(message || 'Failed to decline task.')
+			}
+
+			setExpandedId(null)
+			await fetchAll()
+		} catch (err) {
+			console.error(err)
+			setError(err.message || 'Something went wrong while declining the task.')
+		} finally {
+			setActionLoadingId(null)
+		}
+	}
+
+	const hasCoordinates =
+		selectedBooking?.lat !== null &&
+		selectedBooking?.lat !== undefined &&
+		selectedBooking?.lng !== null &&
+		selectedBooking?.lng !== undefined
 
 	return (
-		<div className="min-h-screen bg-white px-4 py-6 pb-32 sm:py-10 sm:pb-32">
-			<div className="mx-auto w-full max-w-2xl md:max-w-5xl lg:max-w-6xl">
-				<header className="mb-6 flex items-center gap-2 text-[#3878c2]">
+		<>
+			{/* ── Header ──────────────────────────────────────────────────────── */}
+			<div style={{
+				background: C.white,
+				borderBottom: `1px solid ${C.skyBd}`,
+				padding: '16px 20px',
+			}}>
+				<div style={{
+					display: 'flex',
+					alignItems: 'center',
+					gap: 10,
+				}}>
 					<button
 						type="button"
 						onClick={() => navigate(-1)}
-						className="inline-flex items-center"
-						aria-label="Go back"
+						style={{
+							background: 'none',
+							border: 'none',
+							cursor: 'pointer',
+							padding: 0,
+							color: C.blue,
+							display: 'flex',
+							alignItems: 'center',
+						}}
 					>
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-							<path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" width={22} height={22}>
+							<path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
 						</svg>
 					</button>
-					<h1 className="text-2xl font-semibold">Manage Tasks</h1>
-				</header>
 
-				{/* Tabs */}
-				<div className="mb-6 flex border-b border-[#3878c2]/20">
-					<button
-						onClick={() => setActiveTab('available')}
-						className={`px-4 py-2 text-sm font-semibold transition ${activeTab === 'available' ? 'border-b-2 border-[#3878c2] text-[#3878c2]' : 'text-[#b4b4b4]'}`}
-					>
-						Available Tasks ({availableBookings.length})
-					</button>
-					<button
-						onClick={() => setActiveTab('assigned')}
-						className={`px-4 py-2 text-sm font-semibold transition ${activeTab === 'assigned' ? 'border-b-2 border-[#3878c2] text-[#3878c2]' : 'text-[#b4b4b4]'}`}
-					>
-						My Assignments ({bookings.length})
-					</button>
-				</div>
-
-				<div className="grid gap-4 md:grid-cols-2">
-					{loading && <p className="col-span-full text-sm text-[#3878c2]">Updating tasks...</p>}
-					{error && <p className="col-span-full text-sm text-[#e55353]">{error}</p>}
-					{!loading && !error && currentBookings.length === 0 && (
-						<p className="col-span-full text-sm text-[#374151]">No tasks found in this category.</p>
-					)}
-
-					{currentBookings.map((booking) => (
-						<section key={booking.id} className="rounded-2xl border border-[#3878c2] bg-white p-4 shadow-sm flex flex-col">
-							<button type="button" onClick={() => toggleExpand(booking.id)} className="w-full text-left">
-								<div className="flex items-center gap-2 mb-1 flex-wrap">
-									<h2 className="text-base font-semibold text-[#3878c2]">
-										{booking.customerName} <span className="ml-1 text-xs font-normal opacity-70">#{booking.id}</span>
-									</h2>
-									{booking.status === 'Rider Dispatched for Pickup' && (
-										<span className="rounded-full bg-[#3878c2]/10 px-2 py-0.5 text-[10px] font-bold text-[#3878c2] uppercase tracking-wide">📦 Pickup Task</span>
-									)}
-									{booking.status === 'Out for Delivery' && (
-										<span className="rounded-full bg-[#4bad40]/10 px-2 py-0.5 text-[10px] font-bold text-[#4bad40] uppercase tracking-wide">🚀 Delivery Task</span>
-									)}
-								</div>
-							</button>
-
-							<div className="mt-4 grid gap-4 sm:grid-cols-2 flex-grow">
-								<div>
-									<p className="text-xs font-semibold text-[#3878c2]">Pickup From</p>
-									<p className="mt-1 text-sm text-[#374151] line-clamp-2">{booking.pickupAddress || '-'}</p>
-									<p className="mt-1 text-xs text-[#374151]">
-										{formatDate(booking.pickupDate)} • {formatTime(booking.pickupTime)}
-									</p>
-								</div>
-
-								<div>
-									<p className="text-xs font-semibold text-[#3878c2]">Deliver To</p>
-									<p className="mt-1 text-sm text-[#374151] line-clamp-2">{booking.deliveryAddress || '-'}</p>
-									<p className="mt-1 text-xs text-[#374151]">
-										{formatDate(booking.deliveryDate)} • {formatTime(booking.deliveryTime)}
-									</p>
-								</div>
-							</div>
-
-							{activeTab === 'available' ? (
-								<div className="mt-4 flex gap-2">
-									<button
-										onClick={() => handleAccept(booking.dbId)}
-										className="flex-1 rounded-lg bg-[#4bad40] px-3 py-2 text-xs font-bold text-white shadow-sm hover:opacity-90 transition"
-									>
-										Accept Assignment
-									</button>
-									<button
-										onClick={() => handleDecline(booking.dbId)}
-										className="rounded-lg border border-[#e55353] px-3 py-2 text-xs font-bold text-[#e55353] hover:bg-[#e55353]/5 transition"
-									>
-										Decline
-									</button>
-								</div>
-							) : (
-								<button
-									onClick={() => toggleExpand(booking.id)}
-									className="mt-4 w-full rounded-lg border border-[#3878c2] px-3 py-2 text-xs font-bold text-[#3878c2] hover:bg-[#3878c2]/5 transition"
-								>
-									View Details & Map
-								</button>
-							)}
-						</section>
-					))}
+					<h1 style={{
+						fontSize: '1.1875rem',
+						fontWeight: 800,
+						color: '#1f2937',
+						letterSpacing: '-0.02em',
+					}}>
+						Manage Tasks
+					</h1>
 				</div>
 			</div>
 
+			{/* ── Tabs ────────────────────────────────────────────────────────── */}
+			<div style={{
+				background: C.white,
+				borderBottom: `1px solid ${C.skyBd}`,
+			}}>
+				<div style={{
+					display: 'flex',
+				}}>
+					{[
+						{ key: 'available', label: 'Available Tasks', count: todaysAvailableBookings.length },
+						{ key: 'assigned', label: 'Assigned Tasks', count: todaysAssignedBookings.length },
+					].map(({ key, label, count }) => {
+						const isActive = activeTab === key
+
+						return (
+							<button
+								key={key}
+								onClick={() => {
+									setActiveTab(key)
+									setExpandedId(null)
+								}}
+								style={{
+									padding: '14px 20px',
+									border: 'none',
+									borderBottom: isActive ? `2.5px solid ${C.blue}` : '2.5px solid transparent',
+									background: 'none',
+									cursor: 'pointer',
+									fontSize: '0.875rem',
+									fontWeight: isActive ? 700 : 500,
+									color: isActive ? C.blue : C.blueMuted,
+									fontFamily: 'inherit',
+									display: 'flex',
+									alignItems: 'center',
+									gap: 6,
+								}}
+							>
+								{label}
+
+								<span style={{
+									fontSize: '0.75rem',
+									fontWeight: 700,
+									background: isActive ? 'rgba(56,120,194,0.12)' : 'rgba(107,139,174,0.1)',
+									color: isActive ? C.blue : C.blueMuted,
+									borderRadius: '2rem',
+									padding: '1px 7px',
+									minWidth: 22,
+									textAlign: 'center',
+								}}>
+									{count}
+								</span>
+							</button>
+						)
+					})}
+				</div>
+			</div>
+
+			{/* ── Filter chips ────────────────────────────────────────────────── */}
+			<div style={{
+				background: C.white,
+				borderBottom: `1px solid ${C.skyBd}`,
+			}}>
+				<FilterChips selected={filter} onChange={setFilter} counts={chipCounts} />
+			</div>
+
+			{/* ── Task list ───────────────────────────────────────────────────── */}
+			<div style={{
+				padding: '20px 0 120px',
+				boxSizing: 'border-box',
+			}}>
+				{loading && (
+					<p style={{
+						fontSize: '0.875rem',
+						color: C.blue,
+						padding: '12px 20px',
+					}}>
+						Loading tasks…
+					</p>
+				)}
+
+				{error && (
+					<div style={{
+						background: C.white,
+						borderRadius: '1rem',
+						border: `1px solid rgba(229,83,83,0.25)`,
+						padding: '1rem',
+						margin: '0 20px 12px',
+					}}>
+						<p style={{
+							fontSize: '0.875rem',
+							color: C.red,
+							fontWeight: 600,
+						}}>
+							{error}
+						</p>
+					</div>
+				)}
+
+				{!loading && currentBookings.length === 0 && (
+					<div style={{
+						textAlign: 'center',
+						display: 'flex',
+						flexDirection: 'column',
+						alignItems: 'center',
+						justifyContent: 'center',
+						gap: 16,
+						paddingTop: 48,
+					}}>
+						<img
+							src="/images/WashingMachine.png"
+							alt="No notifications"
+							style={{
+								height: 192,
+								width: 'auto',
+								display: 'block',
+							}}
+						/>
+
+						<p style={{
+							fontSize: '0.9375rem',
+							color: C.blueMuted,
+						}}>
+							No tasks found for today.
+						</p>
+					</div>
+				)}
+
+				<div style={{
+					display: 'flex',
+					flexDirection: 'column',
+					gap: 12,
+				}}>
+					{currentBookings.map((booking) => {
+						const m = meta(booking)
+						const isAvailable = activeTab === 'available'
+						const isActionLoading = actionLoadingId === booking.dbId
+
+						return (
+							<div
+								key={booking.id}
+								style={{
+									background: C.white,
+									borderRadius: '1rem',
+									border: `1px solid ${C.skyBd}`,
+									boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+									overflow: 'hidden',
+									display: 'flex',
+								}}
+							>
+								<div style={{
+									width: 4,
+									flexShrink: 0,
+									background: m.color,
+								}} />
+
+								<div style={{
+									flex: 1,
+									padding: '1.125rem 1.25rem',
+								}}>
+									<div style={{
+										display: 'flex',
+										alignItems: 'center',
+										justifyContent: 'space-between',
+										gap: 8,
+										marginBottom: 12,
+									}}>
+										<div style={{
+											display: 'flex',
+											alignItems: 'center',
+											gap: 6,
+											flexWrap: 'wrap',
+										}}>
+											<p style={{
+												fontSize: '0.9375rem',
+												fontWeight: 700,
+												color: '#1f2937',
+											}}>
+												{booking.customerName}
+											</p>
+
+											<span style={{
+												fontSize: '0.75rem',
+												color: C.blueMuted,
+											}}>
+												#{booking.id}
+											</span>
+										</div>
+
+										<span style={{
+											fontSize: '0.6875rem',
+											fontWeight: 700,
+											background: m.bg,
+											color: m.color,
+											borderRadius: '2rem',
+											padding: '2px 10px',
+											textTransform: 'uppercase',
+											letterSpacing: '0.06em',
+											flexShrink: 0,
+										}}>
+											{m.label}
+										</span>
+									</div>
+
+									<div style={{
+										display: 'grid',
+										gridTemplateColumns: '1fr 1fr',
+										gap: 16,
+										marginBottom: 14,
+									}}>
+										<InfoBlock
+											label="Pickup From"
+											address={booking.pickupAddress}
+											date={booking.pickupDate}
+											time={booking.pickupTime}
+										/>
+
+										<InfoBlock
+											label="Deliver To"
+											address={booking.deliveryAddress}
+											date={booking.deliveryDate}
+											time={booking.deliveryTime}
+										/>
+									</div>
+
+									{isAvailable ? (
+										<div style={{
+											display: 'grid',
+											gridTemplateColumns: '1fr 1fr',
+											gap: 8,
+										}}>
+											<button
+												onClick={() => handleAccept(booking)}
+												disabled={isActionLoading}
+												style={{
+													width: '100%',
+													padding: '9px 0',
+													background: C.green,
+													border: `1.5px solid ${C.green}`,
+													borderRadius: '0.625rem',
+													fontSize: '0.8125rem',
+													fontWeight: 700,
+													color: '#fff',
+													cursor: isActionLoading ? 'not-allowed' : 'pointer',
+													fontFamily: 'inherit',
+													opacity: isActionLoading ? 0.7 : 1,
+												}}
+											>
+												{isActionLoading ? 'Accepting…' : 'Accept Task'}
+											</button>
+
+											<button
+												onClick={() => handleDecline(booking)}
+												disabled={isActionLoading}
+												style={{
+													width: '100%',
+													padding: '9px 0',
+													background: C.white,
+													border: `1.5px solid ${C.red}`,
+													borderRadius: '0.625rem',
+													fontSize: '0.8125rem',
+													fontWeight: 700,
+													color: C.red,
+													cursor: isActionLoading ? 'not-allowed' : 'pointer',
+													fontFamily: 'inherit',
+													opacity: isActionLoading ? 0.7 : 1,
+												}}
+											>
+												{isActionLoading ? 'Declining…' : 'Decline'}
+											</button>
+										</div>
+									) : (
+										<button
+											onClick={() => setExpandedId(booking.id)}
+											style={{
+												width: '100%',
+												padding: '9px 0',
+												background: 'none',
+												border: `1.5px solid ${C.blue}`,
+												borderRadius: '0.625rem',
+												fontSize: '0.8125rem',
+												fontWeight: 700,
+												color: C.blue,
+												cursor: 'pointer',
+												fontFamily: 'inherit',
+											}}
+										>
+											View Details &amp; Map
+										</button>
+									)}
+								</div>
+							</div>
+						)
+					})}
+				</div>
+			</div>
+
+			{/* ── Detail overlay ──────────────────────────────────────────────── */}
 			{selectedBooking && (
-				<div className="fixed inset-0 z-50 overflow-y-auto bg-white px-4 py-6 pb-32 sm:py-10 sm:pb-32">
-					<div className="mx-auto w-full max-w-2xl md:max-w-5xl lg:max-w-6xl">
-						<header className="mb-6 flex items-center gap-2 text-[#3878c2]">
+				<div style={{
+					position: 'fixed',
+					inset: 0,
+					zIndex: 50,
+					background: C.bg,
+					overflowY: 'auto',
+					fontFamily: 'Inter, -apple-system, sans-serif',
+				}}>
+					<div style={{
+						background: C.white,
+						borderBottom: `1px solid ${C.skyBd}`,
+						padding: '16px 20px',
+					}}>
+						<div style={{
+							display: 'flex',
+							alignItems: 'center',
+							gap: 10,
+						}}>
 							<button
 								type="button"
 								onClick={() => setExpandedId(null)}
-								className="inline-flex items-center"
-								aria-label="Back to bookings"
+								style={{
+									background: 'none',
+									border: 'none',
+									cursor: 'pointer',
+									padding: 0,
+									color: C.blue,
+									display: 'flex',
+									alignItems: 'center',
+								}}
 							>
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-									<path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" width={22} height={22}>
+									<path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
 								</svg>
 							</button>
-							<h1 className="text-2xl font-semibold">Booking Details</h1>
-						</header>
 
-						<div className="bg-white">
-							<div className="flex justify-between items-start mb-6">
+							<h1 style={{
+								fontSize: '1.1875rem',
+								fontWeight: 800,
+								color: '#1f2937',
+								letterSpacing: '-0.02em',
+							}}>
+								Booking Details
+							</h1>
+						</div>
+					</div>
+
+					<div style={{
+						padding: '20px 0 120px',
+						boxSizing: 'border-box',
+					}}>
+						{/* Customer card */}
+						<div style={{
+							background: C.white,
+							borderRadius: '1rem',
+							border: `1px solid ${C.skyBd}`,
+							boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+							padding: '1.25rem',
+							marginBottom: 12,
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'space-between',
+							gap: 12,
+						}}>
+							<div>
+								<p style={{
+									fontSize: '1.0625rem',
+									fontWeight: 800,
+									color: '#1f2937',
+									letterSpacing: '-0.01em',
+								}}>
+									{selectedBooking.customerName}
+								</p>
+
+								<p style={{
+									fontSize: '0.8125rem',
+									color: C.blueMuted,
+									marginTop: 2,
+								}}>
+									Booking #{selectedBooking.id}
+								</p>
+							</div>
+
+							{(() => {
+								const m = meta(selectedBooking)
+
+								return (
+									<span style={{
+										fontSize: '0.75rem',
+										fontWeight: 700,
+										background: m.bg,
+										color: m.color,
+										borderRadius: '2rem',
+										padding: '4px 14px',
+										textTransform: 'uppercase',
+										letterSpacing: '0.06em',
+										flexShrink: 0,
+									}}>
+										{m.label}
+									</span>
+								)
+							})()}
+						</div>
+
+						{/* Pickup + Delivery */}
+						<div style={{
+							display: 'grid',
+							gridTemplateColumns: '1fr 1fr',
+							gap: 12,
+							marginBottom: 12,
+						}}>
+							<div style={{
+								background: C.white,
+								borderRadius: '1rem',
+								border: `1px solid ${C.skyBd}`,
+								boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+								overflow: 'hidden',
+							}}>
+								<div style={{
+									height: 4,
+									background: C.blue,
+								}} />
+
+								<div style={{
+									padding: '1.125rem',
+								}}>
+									<InfoBlock
+										label="Pickup Information"
+										address={selectedBooking.pickupAddress}
+										date={selectedBooking.pickupDate}
+										time={selectedBooking.pickupTime}
+									/>
+								</div>
+							</div>
+
+							<div style={{
+								background: C.white,
+								borderRadius: '1rem',
+								border: `1px solid ${C.skyBd}`,
+								boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+								overflow: 'hidden',
+							}}>
+								<div style={{
+									height: 4,
+									background: C.green,
+								}} />
+
+								<div style={{
+									padding: '1.125rem',
+								}}>
+									<InfoBlock
+										label="Delivery Information"
+										address={selectedBooking.deliveryAddress}
+										date={selectedBooking.deliveryDate}
+										time={selectedBooking.deliveryTime}
+									/>
+								</div>
+							</div>
+						</div>
+
+						{/* Receipt */}
+						<div style={{
+							background: C.white,
+							borderRadius: '1rem',
+							border: `1px solid ${C.skyBd}`,
+							boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+							padding: '1.25rem',
+							marginBottom: 12,
+						}}>
+							<p style={{
+								fontSize: '0.65rem',
+								fontWeight: 800,
+								letterSpacing: '0.09em',
+								textTransform: 'uppercase',
+								color: C.blueMuted,
+								marginBottom: 14,
+							}}>
+								Receipt
+							</p>
+
+							<button
+								onClick={() => navigate(`/bookings/${selectedBooking.dbId}/receipt`)}
+								style={{
+									width: '100%',
+									padding: '12px 0',
+									background: C.blue,
+									color: '#fff',
+									borderRadius: '0.75rem',
+									border: 'none',
+									fontSize: '0.9rem',
+									fontWeight: 700,
+									cursor: 'pointer',
+									fontFamily: 'inherit',
+									boxShadow: '0 4px 14px rgba(56,120,194,0.24)',
+								}}
+							>
+								View Receipt
+							</button>
+						</div>
+
+						{/* Navigation */}
+						<div style={{
+							background: C.white,
+							borderRadius: '1rem',
+							border: `1px solid ${C.skyBd}`,
+							boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+							padding: '1.25rem',
+						}}>
+							<p style={{
+								fontSize: '0.65rem',
+								fontWeight: 800,
+								letterSpacing: '0.09em',
+								textTransform: 'uppercase',
+								color: C.blueMuted,
+								marginBottom: 14,
+							}}>
+								Navigation
+							</p>
+
+							{hasCoordinates ? (
 								<div>
-									<h2 className="text-xl font-bold text-[#3878c2]">
-										{selectedBooking.customerName}
-										<span className="ml-2 text-sm font-normal text-[#b4b4b4]">#{selectedBooking.id}</span>
-									</h2>
-								</div>
-								{activeTab === 'assigned' && (
-									<div className="flex flex-col gap-2">
-										<button
-											onClick={() => navigate(`/bookings/${selectedBooking.dbId}/receipt`)}
-											className="rounded-lg border border-[#4bad40] px-4 py-2 text-sm font-bold text-[#4bad40] hover:bg-[#4bad40]/5 transition"
-										>
-											View Receipt
-										</button>
+									<div style={{
+										background: C.bg,
+										borderRadius: '0.75rem',
+										border: `1px solid ${C.skyBd}`,
+										padding: '12px 14px',
+										marginBottom: 14,
+									}}>
+										<p style={{
+											fontSize: '0.65rem',
+											fontWeight: 700,
+											textTransform: 'uppercase',
+											letterSpacing: '0.08em',
+											color: C.blueMuted,
+											marginBottom: 4,
+										}}>
+											Pinned Address
+										</p>
+
+										<p style={{
+											fontSize: '0.875rem',
+											fontWeight: 600,
+											color: '#1f2937',
+										}}>
+											{selectedBooking.deliveryAddress}
+										</p>
 									</div>
-								)}
-							</div>
 
-							<div className="grid gap-6 md:grid-cols-2">
-								<div className="rounded-2xl border border-[#3878c2]/20 p-6">
-									<p className="text-xs font-semibold uppercase tracking-wider text-[#b4b4b4] mb-3">Pickup Information</p>
-									<p className="text-base text-[#374151] font-medium mb-2">{selectedBooking.pickupAddress || '-'}</p>
-									<div className="flex items-center gap-4 text-sm text-[#3878c2]">
-										<span>{formatDate(selectedBooking.pickupDate)}</span>
-										<span>{formatTime(selectedBooking.pickupTime)}</span>
-									</div>
-								</div>
-
-								<div className="rounded-2xl border border-[#3878c2]/20 p-6">
-									<p className="text-xs font-semibold uppercase tracking-wider text-[#b4b4b4] mb-3">Delivery Information</p>
-									<p className="text-base text-[#374151] font-medium mb-2">{selectedBooking.deliveryAddress || '-'}</p>
-									<div className="flex items-center gap-4 text-sm text-[#3878c2]">
-										<span>{formatDate(selectedBooking.deliveryDate)}</span>
-										<span>{formatTime(selectedBooking.deliveryTime)}</span>
-									</div>
-								</div>
-							</div>
-
-							<div className="mt-8 rounded-2xl border border-[#3878c2]/20 p-6 bg-[#f9fbff]">
-								<div className="flex items-center justify-between mb-4">
-									<p className="text-xs font-bold text-[#3878c2] uppercase tracking-wider">Navigation</p>
-								</div>
-								
-                                {selectedBooking.lat ? (
-                                    <div className="flex flex-col items-center justify-center p-6 bg-white border border-[#3878c2]/20 rounded-xl shadow-sm text-center">
-                                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-10 text-[#4bad40] mb-3">
-                                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-                                       </svg>
-                                        <p className="text-sm font-bold text-[#3878c2] mb-1">Customer Location Verified</p>
-                                        <p className="text-xs text-[#b4b4b4] mb-4">Launch Google Maps for turn-by-turn navigation.</p>
-                                        <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 w-full mb-4 text-left">
-                                            <p className="text-[10px] font-bold text-[#b4b4b4] uppercase tracking-wider mb-1">Pinned Home Address</p>
-                                            <p className="text-sm font-semibold text-[#374151]">{selectedBooking.deliveryAddress}</p>
-                                        </div>
-                                        <a
-                                            href={`https://www.google.com/maps/dir/?api=1&destination=${selectedBooking.lat},${selectedBooking.lng}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-[#4bad40] px-6 py-3 text-sm font-bold text-white shadow-md hover:bg-[#439b39] transition-colors"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="size-5 flex-shrink-0">
-                                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-                                            </svg>
-                                            Open in Google Maps
-                                        </a>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center p-6 bg-white border border-[#3878c2]/20 rounded-xl shadow-sm text-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-10 text-[#b4b4b4] mb-3">
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                                        </svg>
-                                        <p className="text-sm font-semibold text-[#3878c2]">GPS Coordinates Not Available</p>
-                                        <p className="text-[10px] uppercase text-[#b4b4b4] tracking-widest mt-1">Manual navigation required</p>
-                                    </div>
-                                )}
-							</div>
-
-							{activeTab === 'available' && (
-								<div className="mt-8 flex gap-4">
-									<button
-										onClick={() => handleAccept(selectedBooking.dbId)}
-										className="flex-1 rounded-xl bg-[#4bad40] py-4 text-lg font-bold text-white shadow-lg hover:opacity-90 transition"
+									<a
+										href={`https://www.google.com/maps/dir/?api=1&destination=${selectedBooking.lat},${selectedBooking.lng}`}
+										target="_blank"
+										rel="noopener noreferrer"
+										style={{
+											display: 'flex',
+											alignItems: 'center',
+											justifyContent: 'center',
+											gap: 8,
+											width: '100%',
+											padding: '12px 0',
+											background: C.green,
+											color: '#fff',
+											borderRadius: '0.75rem',
+											border: 'none',
+											fontSize: '0.9rem',
+											fontWeight: 700,
+											textDecoration: 'none',
+											boxSizing: 'border-box',
+											boxShadow: '0 4px 14px rgba(75,173,64,0.28)',
+										}}
 									>
-										Accept Assignment
-									</button>
-									<button
-										onClick={() => handleDecline(selectedBooking.dbId)}
-										className="rounded-xl border-2 border-[#e55353] px-8 py-4 text-lg font-bold text-[#e55353] hover:bg-[#e55353]/5 transition"
-									>
-										Decline
-									</button>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" width={18} height={18}>
+											<path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.125A59.769 59.769 0 0121.485 12 59.768 59.768 0 013.27 20.875L5.999 12zm0 0h7.5" />
+										</svg>
+
+										Open in Google Maps
+									</a>
+								</div>
+							) : (
+								<div style={{
+									display: 'flex',
+									flexDirection: 'column',
+									alignItems: 'center',
+									justifyContent: 'center',
+									padding: '24px 0',
+									textAlign: 'center',
+								}}>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke={C.skyBd} width={40} height={40} style={{ marginBottom: 10 }}>
+										<path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+									</svg>
+
+									<p style={{
+										fontSize: '0.875rem',
+										fontWeight: 600,
+										color: C.blueMuted,
+									}}>
+										GPS Coordinates Not Available
+									</p>
+
+									<p style={{
+										fontSize: '0.75rem',
+										color: C.blueMuted,
+										marginTop: 4,
+									}}>
+										Manual navigation required
+									</p>
 								</div>
 							)}
 						</div>
 					</div>
 				</div>
 			)}
-		</div>
+		</>
 	)
 }

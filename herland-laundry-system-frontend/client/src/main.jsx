@@ -29,6 +29,8 @@ function AppShell() {
 
   const isManagerRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff')
   const shouldHideBottomNav = hideBottomNav || isLoginRoute || isSignupRoute || isManagerRoute
+  const shouldShowDesktopSidebar = !isPublicRoute && !isAuthPage
+  const shouldShowDesktopTopNavbar = isLandingRoute || isLoginRoute || isSignupRoute
 
   useEffect(() => {
     const syncSession = async () => {
@@ -99,11 +101,14 @@ function AppShell() {
 
   return (
     <div className={`min-h-screen bg-white ${isLoginRoute ? 'h-screen overflow-hidden' : ''}`}>
-      <Sidebar
-        collapsed={isSidebarCollapsed}
-        onToggle={() => setIsSidebarCollapsed((current) => !current)}
-        className="max-lg:hidden"
-      />
+      {shouldShowDesktopSidebar && (
+        <Sidebar
+          collapsed={isSidebarCollapsed}
+          onToggle={() => setIsSidebarCollapsed((current) => !current)}
+          className="max-lg:hidden"
+        />
+      )}
+
       <Sidebar
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
@@ -111,22 +116,33 @@ function AppShell() {
         showCollapse={false}
         side="right"
       />
+
       <div
         className={`min-h-screen transition-all duration-300 ease-in-out ${
-          isSidebarCollapsed
-            ? 'lg:ml-[72px] lg:w-[calc(100%-72px)]'
-            : 'lg:ml-[256px] lg:w-[calc(100%-256px)]'
+          shouldShowDesktopSidebar
+            ? isSidebarCollapsed
+              ? 'lg:ml-[72px] lg:w-[calc(100%-72px)]'
+              : 'lg:ml-[256px] lg:w-[calc(100%-256px)]'
+            : 'lg:ml-0 lg:w-full'
         }`}
       >
-        <TopNavbar onMenuClick={() => setIsMobileSidebarOpen(true)} />
+        <TopNavbar
+          onMenuClick={() => setIsMobileSidebarOpen((current) => !current)}
+          className={shouldShowDesktopTopNavbar ? '' : 'lg:hidden'}
+        />
+
         <div
-          className={`mx-auto w-full ${isLandingRoute ? 'max-w-none px-0' : 'max-w-none px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8'
-            } ${isLoginRoute ? '' : 'pb-24 lg:pb-10'}`}
+          className={`mx-auto w-full ${
+            isLandingRoute
+              ? 'max-w-none px-0'
+              : 'max-w-none px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8'
+          } ${isLoginRoute ? '' : 'pb-24 lg:pb-10'}`}
         >
           <div className="min-w-0">
             <AppRoutes />
           </div>
         </div>
+
         {!shouldHideBottomNav && (
           <div className="lg:hidden">
             <BottomNavbar />

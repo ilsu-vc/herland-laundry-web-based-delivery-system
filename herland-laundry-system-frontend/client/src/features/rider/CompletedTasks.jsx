@@ -1,0 +1,878 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { formatDate, formatTime } from '../../shared/utils/formatters'
+import { supabase } from '../../lib/supabase'
+
+const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/rider`
+
+const C = {
+	blue:      '#3878c2',
+	green:     '#4bad40',
+	sky:       '#63bce6',
+	bg:        '#EFF8FC',
+	skyBd:     'rgba(99,188,230,0.28)',
+	blueMuted: '#6b8bae',
+	white:     '#ffffff',
+	red:       '#e55353',
+}
+
+const STATUS_META = {
+	'Delivered': {
+		label: 'Delivery',
+		type: 'Delivery',
+		color: C.blueMuted,
+		bg: 'rgba(107,139,174,0.1)',
+	},
+	'Picked Up': {
+		label: 'Pickup',
+		type: 'Pickup',
+		color: C.blueMuted,
+		bg: 'rgba(107,139,174,0.1)',
+	},
+}
+
+const FILTER_CHIPS = ['All', 'Pickup', 'Delivery']
+
+function InfoBlock({ label, address, date, time }) {
+	return (
+		<div>
+			<p style={{
+				fontSize: '0.65rem',
+				fontWeight: 800,
+				letterSpacing: '0.09em',
+				textTransform: 'uppercase',
+				color: C.blueMuted,
+				marginBottom: 5,
+			}}>
+				{label}
+			</p>
+
+			<p style={{
+				fontSize: '0.875rem',
+				color: '#1f2937',
+				fontWeight: 500,
+				lineHeight: 1.4,
+			}}>
+				{address || '-'}
+			</p>
+
+			{(date || time) && (
+				<p style={{
+					fontSize: '0.75rem',
+					color: C.blue,
+					marginTop: 4,
+					fontWeight: 600,
+				}}>
+					{date ? formatDate(date) : ''}
+					{date && time ? ' • ' : ''}
+					{time ? formatTime(time) : ''}
+				</p>
+			)}
+		</div>
+	)
+}
+
+function FilterChips({ selected, onChange, counts }) {
+	return (
+		<div style={{
+			display: 'flex',
+			gap: 8,
+			padding: '14px 20px',
+			width: '100%',
+			boxSizing: 'border-box',
+		}}>
+			{FILTER_CHIPS.map(chip => {
+				const active = selected === chip
+
+				return (
+					<button
+						key={chip}
+						onClick={() => onChange(chip)}
+						style={{
+							padding: '5px 16px',
+							borderRadius: '2rem',
+							border: active ? `1.5px solid ${C.blue}` : `1.5px solid ${C.skyBd}`,
+							background: active ? 'rgba(56,120,194,0.1)' : C.white,
+							color: active ? C.blue : C.blueMuted,
+							fontSize: '0.8125rem',
+							fontWeight: active ? 700 : 500,
+							cursor: 'pointer',
+							fontFamily: 'inherit',
+							transition: 'all 0.15s',
+							display: 'flex',
+							alignItems: 'center',
+							gap: 6,
+						}}
+					>
+						{chip}
+
+						<span style={{
+							fontSize: '0.6875rem',
+							fontWeight: 800,
+							background: active ? 'rgba(56,120,194,0.14)' : 'rgba(107,139,174,0.1)',
+							color: active ? C.blue : C.blueMuted,
+							borderRadius: '2rem',
+							padding: '1px 6px',
+							minWidth: 20,
+							textAlign: 'center',
+						}}>
+							{counts?.[chip] || 0}
+						</span>
+					</button>
+				)
+			})}
+		</div>
+	)
+}
+
+function getListFromResponse(data) {
+	if (Array.isArray(data)) return data
+	if (Array.isArray(data?.bookings)) return data.bookings
+	if (Array.isArray(data?.data)) return data.data
+	if (Array.isArray(data?.tasks)) return data.tasks
+	return []
+}
+
+function getFallbackAddresses(collectionDetails = {}) {
+	const option = collectionDetails.option || collectionDetails.collectionOption || ''
+
+	const pickupAddress =
+		collectionDetails.pickupAddress ||
+		collectionDetails.collectionAddress ||
+		collectionDetails.dropOffAddress ||
+		''
+
+	const deliveryAddress =
+		collectionDetails.customerAddress ||
+		collectionDetails.deliveryAddress ||
+		collectionDetails.pickupAddress ||
+		collectionDetails.collectionAddress ||
+		''
+
+	if (option === 'dropOffPickUpLater') {
+		return {
+			pickupAddress: 'Herland Laundry',
+			deliveryAddress,
+		}
+	}
+
+	if (option === 'pickupDelivery' || option === 'pickUpDelivery') {
+		return {
+			pickupAddress,
+			deliveryAddress,
+		}
+	}
+
+	if (option === 'pickupOnly' || option === 'pickUpOnly') {
+		return {
+			pickupAddress,
+			deliveryAddress: 'Herland Laundry',
+		}
+	}
+
+	return {
+		pickupAddress,
+		deliveryAddress,
+	}
+}
+
+function mapBookingData(booking) {
+	const collectionDetails = booking.collection_details || {}
+	const fallbackAddresses = getFallbackAddresses(collectionDetails)
+
+	return {
+		id: booking.reference_number || booking.id,
+		dbId: booking.id,
+		status: booking.status || '',
+		customerName: booking.customerName || booking.customer_name || booking.profiles?.full_name || 'Customer',
+
+		pickupAddress:
+			collectionDetails.pickupAddress ||
+			fallbackAddresses.pickupAddress ||
+			'-',
+
+		pickupDate:
+			collectionDetails.collectionDate ||
+			collectionDetails.pickupDate ||
+			collectionDetails.date ||
+			null,
+
+		pickupTime:
+			collectionDetails.collectionTime ||
+			collectionDetails.pickupTime ||
+			collectionDetails.time ||
+			null,
+
+		deliveryAddress:
+			collectionDetails.customerAddress ||
+			collectionDetails.deliveryAddress ||
+			fallbackAddresses.deliveryAddress ||
+			'-',
+
+		deliveryDate:
+			collectionDetails.deliveryDate ||
+			null,
+
+		deliveryTime:
+			collectionDetails.deliveryTime ||
+			null,
+
+		lat:
+			collectionDetails.lat ??
+			collectionDetails.latitude ??
+			null,
+
+		lng:
+			collectionDetails.lng ??
+			collectionDetails.longitude ??
+			null,
+
+		raw: booking,
+	}
+}
+
+function getChipCounts(list) {
+	return {
+		All: list.length,
+		Pickup: list.filter((booking) => STATUS_META[booking.status]?.type === 'Pickup').length,
+		Delivery: list.filter((booking) => STATUS_META[booking.status]?.type === 'Delivery').length,
+	}
+}
+
+export default function CompletedTasks() {
+	const navigate = useNavigate()
+
+	const [bookings, setBookings] = useState([])
+	const [filter, setFilter] = useState('All')
+	const [loading, setLoading] = useState(true)
+	const [error, setError] = useState('')
+	const [expandedId, setExpandedId] = useState(null)
+
+	const fetchCompletedTasks = async () => {
+		try {
+			setLoading(true)
+			setError('')
+
+			const {
+				data: { session },
+			} = await supabase.auth.getSession()
+
+			const token = session?.access_token
+
+			if (!token) {
+				throw new Error('You must be logged in as a rider to view completed tasks.')
+			}
+
+			const headers = {
+				Authorization: `Bearer ${token}`,
+			}
+
+			let res = await fetch(`${API_BASE}/completed-bookings`, { headers })
+
+			if (!res.ok) {
+				res = await fetch(`${API_BASE}/assigned-bookings`, { headers })
+			}
+
+			if (!res.ok) {
+				const message = await res.text()
+				throw new Error(message || 'Failed to fetch completed tasks.')
+			}
+
+			const data = await res.json()
+
+			const completedTasks = getListFromResponse(data)
+				.map(mapBookingData)
+				.filter((booking) => booking.status === 'Picked Up' || booking.status === 'Delivered')
+
+			setBookings(completedTasks)
+		} catch (err) {
+			console.error(err)
+			setError(err.message || 'Something went wrong while loading completed tasks.')
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	useEffect(() => {
+		fetchCompletedTasks()
+	}, [])
+
+	const chipCounts = useMemo(() => {
+		return getChipCounts(bookings)
+	}, [bookings])
+
+	const currentBookings = useMemo(() => {
+		if (filter === 'All') return bookings
+
+		return bookings.filter((booking) => {
+			const type = STATUS_META[booking.status]?.type || ''
+			return type === filter
+		})
+	}, [bookings, filter])
+
+	const selectedBooking = useMemo(
+		() => currentBookings.find((booking) => booking.id === expandedId) || null,
+		[currentBookings, expandedId]
+	)
+
+	const meta = (booking) => {
+		return STATUS_META[booking.status] || {
+			label: booking.status || 'Completed',
+			type: '',
+			color: C.blueMuted,
+			bg: 'rgba(107,139,174,0.1)',
+		}
+	}
+
+	const hasCoordinates =
+		selectedBooking?.lat !== null &&
+		selectedBooking?.lat !== undefined &&
+		selectedBooking?.lng !== null &&
+		selectedBooking?.lng !== undefined
+
+	return (
+		<>
+			{/* ── Header ──────────────────────────────────────────────────────── */}
+			<div style={{
+				background: C.white,
+				borderBottom: `1px solid ${C.skyBd}`,
+				padding: '16px 20px',
+			}}>
+				<div style={{
+					display: 'flex',
+					alignItems: 'center',
+					gap: 10,
+				}}>
+					<button
+						type="button"
+						onClick={() => navigate(-1)}
+						style={{
+							background: 'none',
+							border: 'none',
+							cursor: 'pointer',
+							padding: 0,
+							color: C.blue,
+							display: 'flex',
+							alignItems: 'center',
+						}}
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" width={22} height={22}>
+							<path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+						</svg>
+					</button>
+
+					<h1 style={{
+						fontSize: '1.1875rem',
+						fontWeight: 800,
+						color: '#1f2937',
+						letterSpacing: '-0.02em',
+					}}>
+						Completed Tasks
+					</h1>
+				</div>
+			</div>
+
+			{/* ── Filter chips ────────────────────────────────────────────────── */}
+			<div style={{
+				background: C.white,
+				borderBottom: `1px solid ${C.skyBd}`,
+			}}>
+				<FilterChips selected={filter} onChange={setFilter} counts={chipCounts} />
+			</div>
+
+			{/* ── Task list ───────────────────────────────────────────────────── */}
+			<div style={{
+				padding: '20px 0 120px',
+				boxSizing: 'border-box',
+			}}>
+				{loading && (
+					<p style={{
+						fontSize: '0.875rem',
+						color: C.blue,
+						padding: '12px 20px',
+					}}>
+						Loading completed tasks…
+					</p>
+				)}
+
+				{error && (
+					<div style={{
+						background: C.white,
+						borderRadius: '1rem',
+						border: `1px solid rgba(229,83,83,0.25)`,
+						padding: '1rem',
+						margin: '0 20px 12px',
+					}}>
+						<p style={{
+							fontSize: '0.875rem',
+							color: C.red,
+							fontWeight: 600,
+						}}>
+							{error}
+						</p>
+					</div>
+				)}
+
+				{!loading && currentBookings.length === 0 && (
+					<div style={{
+						textAlign: 'center',
+						display: 'flex',
+						flexDirection: 'column',
+						alignItems: 'center',
+						justifyContent: 'center',
+						gap: 16,
+					}}>
+						<img
+							src="/images/WashingMachine.png"
+							alt="No completed tasks"
+							style={{
+								height: 192,
+								width: 'auto',
+								display: 'block',
+							}}
+						/>
+
+						<p style={{
+							fontSize: '0.9375rem',
+							color: C.blueMuted,
+						}}>
+							No completed tasks found.
+						</p>
+					</div>
+				)}
+
+				<div style={{
+					display: 'flex',
+					flexDirection: 'column',
+					gap: 12,
+				}}>
+					{currentBookings.map((booking) => {
+						const m = meta(booking)
+
+						return (
+							<div
+								key={booking.id}
+								style={{
+									background: C.white,
+									borderRadius: '1rem',
+									border: `1px solid ${C.skyBd}`,
+									boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+									overflow: 'hidden',
+									display: 'flex',
+								}}
+							>
+								<div style={{
+									width: 4,
+									flexShrink: 0,
+									background: m.color,
+								}} />
+
+								<div style={{
+									flex: 1,
+									padding: '1.125rem 1.25rem',
+								}}>
+									<div style={{
+										display: 'flex',
+										alignItems: 'center',
+										justifyContent: 'space-between',
+										gap: 8,
+										marginBottom: 12,
+									}}>
+										<div style={{
+											display: 'flex',
+											alignItems: 'center',
+											gap: 6,
+											flexWrap: 'wrap',
+										}}>
+											<p style={{
+												fontSize: '0.9375rem',
+												fontWeight: 700,
+												color: '#1f2937',
+											}}>
+												{booking.customerName}
+											</p>
+
+											<span style={{
+												fontSize: '0.75rem',
+												color: C.blueMuted,
+											}}>
+												#{booking.id}
+											</span>
+										</div>
+
+										<span style={{
+											fontSize: '0.6875rem',
+											fontWeight: 700,
+											background: m.bg,
+											color: m.color,
+											borderRadius: '2rem',
+											padding: '2px 10px',
+											textTransform: 'uppercase',
+											letterSpacing: '0.06em',
+											flexShrink: 0,
+										}}>
+											Completed {m.label}
+										</span>
+									</div>
+
+									<div style={{
+										display: 'grid',
+										gridTemplateColumns: '1fr 1fr',
+										gap: 16,
+										marginBottom: 14,
+									}}>
+										<InfoBlock
+											label="Pickup From"
+											address={booking.pickupAddress}
+											date={booking.pickupDate}
+											time={booking.pickupTime}
+										/>
+
+										<InfoBlock
+											label="Deliver To"
+											address={booking.deliveryAddress}
+											date={booking.deliveryDate}
+											time={booking.deliveryTime}
+										/>
+									</div>
+
+									<button
+										onClick={() => setExpandedId(booking.id)}
+										style={{
+											width: '100%',
+											padding: '9px 0',
+											background: 'none',
+											border: `1.5px solid ${C.blue}`,
+											borderRadius: '0.625rem',
+											fontSize: '0.8125rem',
+											fontWeight: 700,
+											color: C.blue,
+											cursor: 'pointer',
+											fontFamily: 'inherit',
+										}}
+									>
+										View Details &amp; Map
+									</button>
+								</div>
+							</div>
+						)
+					})}
+				</div>
+			</div>
+
+			{/* ── Detail overlay ──────────────────────────────────────────────── */}
+			{selectedBooking && (
+				<div style={{
+					position: 'fixed',
+					inset: 0,
+					zIndex: 50,
+					background: C.bg,
+					overflowY: 'auto',
+					fontFamily: 'Inter, -apple-system, sans-serif',
+				}}>
+					<div style={{
+						background: C.white,
+						borderBottom: `1px solid ${C.skyBd}`,
+						padding: '16px 20px',
+					}}>
+						<div style={{
+							display: 'flex',
+							alignItems: 'center',
+							gap: 10,
+						}}>
+							<button
+								type="button"
+								onClick={() => setExpandedId(null)}
+								style={{
+									background: 'none',
+									border: 'none',
+									cursor: 'pointer',
+									padding: 0,
+									color: C.blue,
+									display: 'flex',
+									alignItems: 'center',
+								}}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" width={22} height={22}>
+									<path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+								</svg>
+							</button>
+
+							<h1 style={{
+								fontSize: '1.1875rem',
+								fontWeight: 800,
+								color: '#1f2937',
+								letterSpacing: '-0.02em',
+							}}>
+								Completed Task Details
+							</h1>
+						</div>
+					</div>
+
+					<div style={{
+						padding: '20px 0 120px',
+						boxSizing: 'border-box',
+					}}>
+						{/* Customer card */}
+						<div style={{
+							background: C.white,
+							borderRadius: '1rem',
+							border: `1px solid ${C.skyBd}`,
+							boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+							padding: '1.25rem',
+							marginBottom: 12,
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'space-between',
+							gap: 12,
+						}}>
+							<div>
+								<p style={{
+									fontSize: '1.0625rem',
+									fontWeight: 800,
+									color: '#1f2937',
+									letterSpacing: '-0.01em',
+								}}>
+									{selectedBooking.customerName}
+								</p>
+
+								<p style={{
+									fontSize: '0.8125rem',
+									color: C.blueMuted,
+									marginTop: 2,
+								}}>
+									Booking #{selectedBooking.id}
+								</p>
+							</div>
+
+							{(() => {
+								const m = meta(selectedBooking)
+
+								return (
+									<span style={{
+										fontSize: '0.75rem',
+										fontWeight: 700,
+										background: m.bg,
+										color: m.color,
+										borderRadius: '2rem',
+										padding: '4px 14px',
+										textTransform: 'uppercase',
+										letterSpacing: '0.06em',
+										flexShrink: 0,
+									}}>
+										Completed {m.label}
+									</span>
+								)
+							})()}
+						</div>
+
+						{/* Pickup + Delivery */}
+						<div style={{
+							display: 'grid',
+							gridTemplateColumns: '1fr 1fr',
+							gap: 12,
+							marginBottom: 12,
+						}}>
+							<div style={{
+								background: C.white,
+								borderRadius: '1rem',
+								border: `1px solid ${C.skyBd}`,
+								boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+								overflow: 'hidden',
+							}}>
+								<div style={{
+									height: 4,
+									background: C.blue,
+								}} />
+
+								<div style={{
+									padding: '1.125rem',
+								}}>
+									<InfoBlock
+										label="Pickup Information"
+										address={selectedBooking.pickupAddress}
+										date={selectedBooking.pickupDate}
+										time={selectedBooking.pickupTime}
+									/>
+								</div>
+							</div>
+
+							<div style={{
+								background: C.white,
+								borderRadius: '1rem',
+								border: `1px solid ${C.skyBd}`,
+								boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+								overflow: 'hidden',
+							}}>
+								<div style={{
+									height: 4,
+									background: C.green,
+								}} />
+
+								<div style={{
+									padding: '1.125rem',
+								}}>
+									<InfoBlock
+										label="Delivery Information"
+										address={selectedBooking.deliveryAddress}
+										date={selectedBooking.deliveryDate}
+										time={selectedBooking.deliveryTime}
+									/>
+								</div>
+							</div>
+						</div>
+
+						{/* Receipt */}
+						<div style={{
+							background: C.white,
+							borderRadius: '1rem',
+							border: `1px solid ${C.skyBd}`,
+							boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+							padding: '1.25rem',
+							marginBottom: 12,
+						}}>
+							<p style={{
+								fontSize: '0.65rem',
+								fontWeight: 800,
+								letterSpacing: '0.09em',
+								textTransform: 'uppercase',
+								color: C.blueMuted,
+								marginBottom: 14,
+							}}>
+								Receipt
+							</p>
+
+							<button
+								onClick={() => navigate(`/bookings/${selectedBooking.dbId}/receipt`)}
+								style={{
+									width: '100%',
+									padding: '12px 0',
+									background: C.blue,
+									color: '#fff',
+									borderRadius: '0.75rem',
+									border: 'none',
+									fontSize: '0.9rem',
+									fontWeight: 700,
+									cursor: 'pointer',
+									fontFamily: 'inherit',
+									boxShadow: '0 4px 14px rgba(56,120,194,0.24)',
+								}}
+							>
+								View Receipt
+							</button>
+						</div>
+
+						{/* Navigation */}
+						<div style={{
+							background: C.white,
+							borderRadius: '1rem',
+							border: `1px solid ${C.skyBd}`,
+							boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+							padding: '1.25rem',
+						}}>
+							<p style={{
+								fontSize: '0.65rem',
+								fontWeight: 800,
+								letterSpacing: '0.09em',
+								textTransform: 'uppercase',
+								color: C.blueMuted,
+								marginBottom: 14,
+							}}>
+								Navigation
+							</p>
+
+							{hasCoordinates ? (
+								<div>
+									<div style={{
+										background: C.bg,
+										borderRadius: '0.75rem',
+										border: `1px solid ${C.skyBd}`,
+										padding: '12px 14px',
+										marginBottom: 14,
+									}}>
+										<p style={{
+											fontSize: '0.65rem',
+											fontWeight: 700,
+											textTransform: 'uppercase',
+											letterSpacing: '0.08em',
+											color: C.blueMuted,
+											marginBottom: 4,
+										}}>
+											Pinned Address
+										</p>
+
+										<p style={{
+											fontSize: '0.875rem',
+											fontWeight: 600,
+											color: '#1f2937',
+										}}>
+											{selectedBooking.deliveryAddress}
+										</p>
+									</div>
+
+									<a
+										href={`https://www.google.com/maps/dir/?api=1&destination=${selectedBooking.lat},${selectedBooking.lng}`}
+										target="_blank"
+										rel="noopener noreferrer"
+										style={{
+											display: 'flex',
+											alignItems: 'center',
+											justifyContent: 'center',
+											gap: 8,
+											width: '100%',
+											padding: '12px 0',
+											background: C.green,
+											color: '#fff',
+											borderRadius: '0.75rem',
+											border: 'none',
+											fontSize: '0.9rem',
+											fontWeight: 700,
+											textDecoration: 'none',
+											boxSizing: 'border-box',
+											boxShadow: '0 4px 14px rgba(75,173,64,0.28)',
+										}}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" width={18} height={18}>
+											<path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.125A59.769 59.769 0 0121.485 12 59.768 59.768 0 013.27 20.875L5.999 12zm0 0h7.5" />
+										</svg>
+
+										Open in Google Maps
+									</a>
+								</div>
+							) : (
+								<div style={{
+									display: 'flex',
+									flexDirection: 'column',
+									alignItems: 'center',
+									justifyContent: 'center',
+									padding: '24px 0',
+									textAlign: 'center',
+								}}>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke={C.skyBd} width={40} height={40} style={{ marginBottom: 10 }}>
+										<path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+									</svg>
+
+									<p style={{
+										fontSize: '0.875rem',
+										fontWeight: 600,
+										color: C.blueMuted,
+									}}>
+										GPS Coordinates Not Available
+									</p>
+
+									<p style={{
+										fontSize: '0.75rem',
+										color: C.blueMuted,
+										marginTop: 4,
+									}}>
+										Manual navigation required
+									</p>
+								</div>
+							)}
+						</div>
+					</div>
+				</div>
+			)}
+		</>
+	)
+}

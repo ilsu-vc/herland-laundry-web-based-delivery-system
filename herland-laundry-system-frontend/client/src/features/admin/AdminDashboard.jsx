@@ -1,110 +1,603 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import TopNavbar from '../../shared/navigation/TopNavbar';
-import BottomNavbar from '../../shared/navigation/BottomNavbar';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { supabase } from '../../lib/supabase';
 
-const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/admin`;
+const Colors = {
+  blue: '#3878C2',
+  blueMuted: '#6B8DB3',
+  sky: '#63BCE6',
+  skyFaint: '#EEF8FD',
+  green: '#4BAD40',
+  greenFaint: 'rgba(75, 173, 64, 0.1)',
+};
 
-const menuItems = [
-	{ label: 'Manage Bookings', path: '/admin/manage-bookings' },
-	{ label: 'Manage Employees', path: '/admin/manage-employees' },
-	{ label: 'Manage Admins', path: '/admin/manage-admins' },
-	{ label: 'Manage Services', path: '/admin/manage-services' },
-	{ label: 'Manage Users', path: '/admin/manage-users' },
-	{ label: 'Reports', path: '/admin/reports' },
-];
+const STATUS_META = {
+  BookingReceived: { label: 'Booking Received', color: '#b4b4b4' },
+  BookingAccepted: { label: 'Booking Accepted', color: '#ffde59' },
+  BookingEdited: { label: 'Booking Edited', color: '#ffde59' },
+  PaymentConfirmed: { label: 'Payment Confirmed', color: '#ffde59' },
+  RiderDispatchedForPickup: { label: 'Rider Dispatched for Pickup', color: '#ffde59' },
+  PickedUpFromCustomer: { label: 'Picked Up from Customer', color: '#ffde59' },
+  InProgress: { label: 'Laundry In Progress', color: '#ffde59' },
+  OutForDelivery: { label: 'Out for Delivery', color: '#ffde59' },
+  ReadyForPickup: { label: 'Ready for Pick-up', color: '#63bce6' },
+  LaundryDelivered: { label: 'Laundry Delivered', color: '#63bce6' },
+  BookingCompleted: { label: 'Booking Completed', color: '#63bce6' },
+  FeedbackSubmitted: { label: 'Feedback Submitted', color: '#4bad40' },
+  BookingCancelled: { label: 'Booking Cancelled', color: '#ff0000' },
+  PaymentFlagged: { label: 'Payment Flagged', color: '#ff0000' },
+};
 
-export default function AdminDashboard() {
-	const navigate = useNavigate();
-	const [stats, setStats] = useState({ total_bookings: 0, completed_bookings: 0, estimated_revenue: 0, formatted_revenue: '₱0.00' });
-	const [loading, setLoading] = useState(true);
+const STATUS_LABEL_TO_KEY = Object.entries(STATUS_META).reduce((acc, [key, meta]) => {
+  acc[meta.label] = key;
+  return acc;
+}, {});
 
-	useEffect(() => {
-		const fetchStats = async () => {
-			try {
-				const { data: { session } } = await supabase.auth.getSession();
-				const token = session?.access_token;
-				const response = await fetch(`${API_BASE}/dashboard-stats`, {
-					headers: { Authorization: `Bearer ${token}` }
-				});
-				if (response.ok) {
-					const data = await response.json();
-					setStats(data);
-				}
-			} catch (err) {
-				console.error('Error fetching admin stats:', err);
-			} finally {
-				setLoading(false);
-			}
-		};
-		fetchStats();
-	}, []);
+const card = {
+  background: '#ffffff',
+  borderRadius: '1.25rem',
+  boxShadow: '0 10px 30px rgba(56, 120, 194, 0.08)',
+  border: '1px solid rgba(56, 120, 194, 0.12)',
+};
 
-	return (
-		<div className="relative flex min-h-screen flex-col bg-white">
-			<main className="relative flex flex-1 flex-col pb-24">
-				<div className="relative h-64 w-full overflow-hidden md:h-80 lg:h-96">
-					<img
-						src="https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&q=80"
-						alt="Laundry Shop"
-						className="h-full w-full object-cover"
-					/>
-					<div className="absolute inset-0 flex flex-col items-center justify-center bg-herland-blue/50 p-4 text-center">
-						<h1 className="mb-2 text-xl font-bold leading-tight text-white drop-shadow-lg md:text-3xl lg:text-4xl">
-							This is the Admin Dashboard!
-						</h1>
-						<h2 className="text-lg font-bold leading-tight text-white drop-shadow-lg md:text-2xl lg:text-3xl">
-							What do you want to do today?
-						</h2>
-					</div>
-				</div>
+const alertCard = {
+  ...card,
+  overflow: 'hidden',
+};
 
-				<div className="mx-auto w-full max-w-md px-6 py-8 md:max-w-3xl lg:max-w-5xl">
-					{/* Stats Grid */}
-					<div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-						<div className="rounded-2xl border border-[#3878c2]/20 bg-white p-4 text-center shadow-sm">
-							<p className="text-xs font-semibold uppercase tracking-wider text-[#b4b4b4]">Revenue</p>
-							<p className="mt-1 text-2xl font-black text-[#4bad40]">{loading ? '...' : stats.formatted_revenue}</p>
-						</div>
-						<div className="rounded-2xl border border-[#3878c2]/20 bg-white p-4 text-center shadow-sm">
-							<p className="text-xs font-semibold uppercase tracking-wider text-[#b4b4b4]">Active Bookings</p>
-							<p className="mt-1 text-2xl font-black text-[#3878c2]">{loading ? '...' : stats.total_bookings}</p>
-						</div>
-						<div className="rounded-2xl border border-[#3878c2]/20 bg-white p-4 text-center shadow-sm">
-							<p className="text-xs font-semibold uppercase tracking-wider text-[#b4b4b4]">Completed</p>
-							<p className="mt-1 text-2xl font-black text-herland-blue">{loading ? '...' : stats.completed_bookings}</p>
-						</div>
-					</div>
+const typography = {
+  h1: {
+    fontSize: '2rem',
+    fontWeight: 800,
+    color: Colors.blue,
+    lineHeight: 1.2,
+  },
+  h2: {
+    fontSize: '1.25rem',
+    fontWeight: 700,
+    color: Colors.blue,
+    lineHeight: 1.3,
+  },
+  body: {
+    fontSize: '0.9375rem',
+    color: Colors.blueMuted,
+    lineHeight: 1.6,
+  },
+};
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {menuItems.map((item) => (
-                            <div 
-                                key={item.path}
-                                className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 hover:shadow-md hover:-translate-y-1 transition-all duration-300 cursor-pointer flex items-center gap-4 group" 
-                                onClick={() => navigate(item.path)}
-                            >
-                                <div className={`flex h-12 w-12 items-center justify-center shrink-0 rounded-xl transition-colors ${item.label.includes('Bookings') ? 'bg-[#4bad40]/10 text-[#4bad40] group-hover:bg-[#4bad40]/20' : 'bg-[#3878c2]/10 text-[#3878c2] group-hover:bg-[#3878c2]/20'}`}>
-                                    {item.label.includes('Bookings') ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" /></svg>
-                                    ) : item.label.includes('Users') || item.label.includes('Employees') || item.label.includes('Admins') ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
-                                    ) : item.label.includes('Reports') ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg>
-                                    ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.99l1.005.828c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
-                                    )}
-                                </div>
-                                <div>
-                                    <h3 className={`font-semibold text-gray-900 transition-colors ${item.label.includes('Bookings') ? 'group-hover:text-[#4bad40]' : 'group-hover:text-[#3878c2]'}`}>{item.label}</h3>
-                                </div>
-                            </div>
-                        ))}
+const normalizeText = (value) => {
+  return String(value || '').toLowerCase().trim();
+};
+
+const isToday = (dateValue) => {
+  if (!dateValue) return false;
+
+  const date = new Date(dateValue);
+  const today = new Date();
+
+  return (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  );
+};
+
+const formatTime = (dateValue) => {
+  if (!dateValue) return 'No time';
+
+  return new Date(dateValue).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const getStatusKey = (status) => {
+  if (!status) return 'BookingReceived';
+
+  if (STATUS_META[status]) return status;
+
+  return STATUS_LABEL_TO_KEY[status] || String(status).replace(/\s+/g, '');
+};
+
+const getLatestStatusFromTimeline = (timeline) => {
+  if (!Array.isArray(timeline) || timeline.length === 0) return '';
+
+  const latest = timeline[timeline.length - 1];
+  return latest?.status || '';
+};
+
+const getBookingStatusKey = (booking) => {
+  const latestTimelineStatus = getLatestStatusFromTimeline(booking.timeline);
+  return getStatusKey(latestTimelineStatus || booking.status || booking.stage);
+};
+
+const getBookingStatusMeta = (booking) => {
+  const statusKey = getBookingStatusKey(booking);
+
+  return STATUS_META[statusKey] || {
+    label: booking.status || booking.stage || 'In Progress',
+    color: Colors.blue,
+  };
+};
+
+const isBookingReceived = (booking) => {
+  return getBookingStatusKey(booking) === 'BookingReceived';
+};
+
+const isVerifyPayment = (booking) => {
+  const statusKey = getBookingStatusKey(booking);
+  const stage = normalizeText(booking.stage);
+
+  return (
+    statusKey === 'BookingAccepted' ||
+    statusKey === 'BookingEdited' ||
+    stage === 'payment'
+  );
+};
+
+const isLaundryInProgress = (booking) => {
+  return getBookingStatusKey(booking) === 'InProgress';
+};
+
+const getBookingStatusLabel = (booking) => {
+  return getBookingStatusMeta(booking).label;
+};
+
+const getServiceLabel = (serviceDetails) => {
+  if (!serviceDetails) return 'Full Service Laundry';
+
+  if (typeof serviceDetails === 'string') {
+    return serviceDetails;
+  }
+
+  if (serviceDetails.loadType) {
+    return serviceDetails.loadType;
+  }
+
+  if (serviceDetails.service) {
+    return serviceDetails.service;
+  }
+
+  if (serviceDetails.name) {
+    return serviceDetails.name;
+  }
+
+  if (Array.isArray(serviceDetails.loads) && serviceDetails.loads.length > 0) {
+    return serviceDetails.loads
+      .map((load) => load.label || load.name || load.type)
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  return 'Full Service Laundry';
+};
+
+const getCustomerName = (booking, profileMap) => {
+  const profile = profileMap.get(booking.user_id);
+
+  return (
+    profile?.full_name ||
+    booking.customer_name ||
+    booking.customerName ||
+    'Customer'
+  );
+};
+
+const getBookingDisplayId = (booking) => {
+  return booking.reference_number || booking.id;
+};
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+
+  const [bookings, setBookings] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const profileMap = useMemo(() => {
+    return new Map(profiles.map((profile) => [profile.id, profile]));
+  }, [profiles]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('bookings')
+        .select(
+          'id, reference_number, user_id, status, stage, created_at, service_details, timeline'
+        )
+        .order('created_at', { ascending: false });
+
+      if (bookingsError) {
+        throw bookingsError;
+      }
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, role');
+
+      if (profilesError) {
+        throw profilesError;
+      }
+
+      setBookings(bookingsData || []);
+      setProfiles(profilesData || []);
+    } catch (err) {
+      console.error('Error loading admin dashboard:', err);
+      setError('Could not load dashboard data.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const bookingReceivedCount = useMemo(() => {
+    return bookings.filter(isBookingReceived).length;
+  }, [bookings]);
+
+  const verifyPaymentCount = useMemo(() => {
+    return bookings.filter(isVerifyPayment).length;
+  }, [bookings]);
+
+  const laundryInProgressCount = useMemo(() => {
+    return bookings.filter(isLaundryInProgress).length;
+  }, [bookings]);
+
+  const bookingsToday = useMemo(() => {
+    return bookings.filter((booking) => isToday(booking.created_at));
+  }, [bookings]);
+
+  const totalCustomers = useMemo(() => {
+    return profiles.filter((profile) => normalizeText(profile.role) === 'customer').length;
+  }, [profiles]);
+
+  const totalEmployees = useMemo(() => {
+    return profiles.filter((profile) => {
+      const role = normalizeText(profile.role);
+      return role === 'employee' || role === 'staff' || role === 'rider';
+    }).length;
+  }, [profiles]);
+
+  const totalAdmins = useMemo(() => {
+    return profiles.filter((profile) => normalizeText(profile.role) === 'admin').length;
+  }, [profiles]);
+
+  return (
+    <div className="min-h-screen w-full" style={{ background: Colors.skyFaint }}>
+      <main className="p-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 style={typography.h1}>Dashboard</h1>
+          <p style={{ ...typography.body, marginTop: '0.5rem' }}>
+            Monitor real-time operations, bookings, and system status
+          </p>
+        </div>
+
+        {loading && (
+          <div className="mb-8 rounded-xl bg-white p-6 text-center shadow-sm">
+            <p style={{ ...typography.body, color: Colors.blueMuted }}>
+              Loading dashboard data...
+            </p>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="mb-8 rounded-xl bg-white p-6 text-center shadow-sm">
+            <p style={{ ...typography.body, color: '#EB5757' }}>
+              {error}
+            </p>
+          </div>
+        )}
+
+        {/* Alert Cards */}
+        <div className="grid grid-cols-3 gap-3 md:gap-6 mb-8">
+          {/* Booking Received */}
+          <button
+            onClick={() => navigate('/admin/manage-bookings?filter=BookingReceived')}
+            className="text-center md:text-left transition-all duration-200 hover:-translate-y-1 active:scale-95"
+            style={alertCard}
+          >
+            <div className="block md:hidden p-4">
+              <span
+                className="block text-3xl font-black"
+                style={{ color: STATUS_META.BookingReceived.color }}
+              >
+                {bookingReceivedCount}
+              </span>
+              <p style={{ fontSize: '0.75rem', fontWeight: 600, color: Colors.blue, marginTop: '0.5rem' }}>
+                Booking Received
+              </p>
+            </div>
+
+            <div className="hidden md:flex p-6 items-center justify-between">
+              <div>
+                <p style={{ fontSize: '1rem', fontWeight: 600, color: Colors.blue }}>
+                  Booking Received
+                </p>
+                <span
+                  className="block text-3xl font-black mt-3"
+                  style={{ color: STATUS_META.BookingReceived.color }}
+                >
+                  {bookingReceivedCount}
+                </span>
+              </div>
+
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ background: 'rgba(180,180,180,0.15)' }}
+              >
+                <svg
+                  className="w-6 h-6"
+                  style={{ color: STATUS_META.BookingReceived.color }}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+                  />
+                </svg>
+              </div>
+            </div>
+          </button>
+
+          {/* Verify Payment */}
+          <button
+            onClick={() => navigate('/admin/manage-bookings?filter=payment')}
+            className="text-center md:text-left transition-all duration-200 hover:-translate-y-1 active:scale-95"
+            style={alertCard}
+          >
+            <div className="block md:hidden p-4">
+              <span
+                className="block text-3xl font-black"
+                style={{ color: STATUS_META.PaymentConfirmed.color }}
+              >
+                {verifyPaymentCount}
+              </span>
+              <p style={{ fontSize: '0.75rem', fontWeight: 600, color: Colors.blue, marginTop: '0.5rem' }}>
+                Verify Payment
+              </p>
+            </div>
+
+            <div className="hidden md:flex p-6 items-center justify-between">
+              <div>
+                <p style={{ fontSize: '1rem', fontWeight: 600, color: Colors.blue }}>
+                  Verify Payment
+                </p>
+                <span
+                  className="block text-3xl font-black mt-3"
+                  style={{ color: STATUS_META.PaymentConfirmed.color }}
+                >
+                  {verifyPaymentCount}
+                </span>
+              </div>
+
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ background: 'rgba(255,222,89,0.18)' }}
+              >
+                <svg
+                  className="w-6 h-6"
+                  style={{ color: STATUS_META.PaymentConfirmed.color }}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"
+                  />
+                </svg>
+              </div>
+            </div>
+          </button>
+
+          {/* Laundry In Progress */}
+          <button
+            onClick={() => navigate('/admin/manage-bookings?filter=InProgress')}
+            className="text-center md:text-left transition-all duration-200 hover:-translate-y-1 active:scale-95"
+            style={alertCard}
+          >
+            <div className="block md:hidden p-4">
+              <span
+                className="block text-3xl font-black"
+                style={{ color: STATUS_META.InProgress.color }}
+              >
+                {laundryInProgressCount}
+              </span>
+              <p style={{ fontSize: '0.75rem', fontWeight: 600, color: Colors.blue, marginTop: '0.5rem' }}>
+                Laundry In Progress
+              </p>
+            </div>
+
+            <div className="hidden md:flex p-6 items-center justify-between">
+              <div>
+                <p style={{ fontSize: '1rem', fontWeight: 600, color: Colors.blue }}>
+                  Laundry In Progress
+                </p>
+                <span
+                  className="block text-3xl font-black mt-3"
+                  style={{ color: STATUS_META.InProgress.color }}
+                >
+                  {laundryInProgressCount}
+                </span>
+              </div>
+
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ background: 'rgba(255,222,89,0.18)' }}
+              >
+                <svg
+                  className="w-6 h-6"
+                  style={{ color: STATUS_META.InProgress.color }}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+                  />
+                </svg>
+              </div>
+            </div>
+          </button>
+        </div>
+
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* All Bookings Today */}
+          <div className="lg:col-span-2">
+            <div style={card} className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 style={typography.h2}>All Bookings Today</h2>
+                <button
+                  onClick={() => navigate('/admin/manage-bookings')}
+                  className="px-4 py-2 rounded-lg transition-all duration-150"
+                  style={{
+                    background: Colors.skyFaint,
+                    color: Colors.blue,
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  View All
+                </button>
+              </div>
+
+              <div className="max-h-[600px] overflow-y-auto">
+                {!loading && bookingsToday.length === 0 && (
+                  <div className="py-8 text-center">
+                    <p style={{ fontSize: '0.9375rem', color: Colors.blueMuted }}>
+                      No bookings for today.
+                    </p>
+                  </div>
+                )}
+
+                {bookingsToday.map((booking, index) => {
+                  const bookingId = getBookingDisplayId(booking);
+                  const statusLabel = getBookingStatusLabel(booking);
+                  const statusMeta = getBookingStatusMeta(booking);
+                  const statusColor = statusMeta.color;
+
+                  return (
+                    <div key={booking.id}>
+                      <button
+                        onClick={() => navigate(`/dashboard/bookings/${booking.id}`)}
+                        className="w-full text-left py-4 transition-all duration-150 hover:bg-gray-50/50"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: Colors.blue }}>
+                            {bookingId}
+                          </span>
+                          <span
+                            className="px-3 py-1 rounded-full text-xs font-semibold"
+                            style={{
+                              background: statusColor,
+                              color: statusColor === '#ffde59' ? Colors.blue : '#ffffff',
+                              border: `1px solid ${statusColor}`,
+                            }}
+                          >
+                            {statusLabel}
+                          </span>
+                        </div>
+
+                        <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: Colors.blue }}>
+                          {getCustomerName(booking, profileMap)}
+                        </p>
+
+                        <div className="flex items-center gap-4 mt-2">
+                          <span style={{ fontSize: '0.8125rem', color: Colors.blueMuted }}>
+                            {getServiceLabel(booking.service_details)}
+                          </span>
+                          <span style={{ fontSize: '0.8125rem', color: Colors.blueMuted }}>
+                            • {formatTime(booking.created_at)}
+                          </span>
+                        </div>
+                      </button>
+
+                      {index < bookingsToday.length - 1 && (
+                        <div style={{ height: '1px', background: Colors.blue, opacity: 0.2 }} />
+                      )}
                     </div>
-				</div>
-			</main>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
 
-			<BottomNavbar />
-		</div>
-	);
+          {/* All Users */}
+          <div style={card} className="p-6 self-start">
+            <div className="flex items-center justify-between mb-6">
+              <h2 style={typography.h2}>All Users</h2>
+              <button
+                onClick={() => navigate('/admin/manage-users')}
+                className="px-4 py-2 rounded-lg transition-all duration-150"
+                style={{
+                  background: Colors.skyFaint,
+                  color: Colors.blue,
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                }}
+              >
+                View All
+              </button>
+            </div>
+
+            <div>
+              <div className="py-4">
+                <div className="flex items-center justify-between">
+                  <p style={{ fontSize: '1rem', fontWeight: 600, color: Colors.blue }}>
+                    Total Customers
+                  </p>
+                  <span className="text-3xl font-black" style={{ color: Colors.sky }}>
+                    {totalCustomers.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ height: '1px', background: Colors.blue, opacity: 0.2 }} />
+
+              <div className="py-4">
+                <div className="flex items-center justify-between">
+                  <p style={{ fontSize: '1rem', fontWeight: 600, color: Colors.blue }}>
+                    Total Employees
+                  </p>
+                  <span className="text-3xl font-black" style={{ color: Colors.green }}>
+                    {totalEmployees.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ height: '1px', background: Colors.blue, opacity: 0.2 }} />
+
+              <div className="py-4">
+                <div className="flex items-center justify-between">
+                  <p style={{ fontSize: '1rem', fontWeight: 600, color: Colors.blue }}>
+                    Total Admins
+                  </p>
+                  <span className="text-3xl font-black" style={{ color: Colors.blue }}>
+                    {totalAdmins.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
 }

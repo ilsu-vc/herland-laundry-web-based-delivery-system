@@ -1817,9 +1817,11 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
 
 
   return (
-    <div className="flex flex-col min-h-[70vh] sm:min-h-[72vh] bg-[#ffffff] text-[#3878c2] pb-6 px-0 sm:px-2 relative">
+    <div className="flex flex-col min-h-[70vh] sm:min-h-[72vh] bg-[#eff8fc] text-[#1f2937] pb-6 px-0 sm:px-2 relative">
       <div className="z-20 mx-auto w-full max-w-2xl md:max-w-6xl lg:max-w-7xl px-2 sm:px-1 pt-2 pb-4">
-        <SectionLabel>Address Details</SectionLabel>
+        <div className="mb-8">
+          <BookNowStepTitle>Address Details</BookNowStepTitle>
+        </div>
         <label htmlFor="simple-search" className="sr-only">Search</label>
         <div className="flex items-center gap-2">
           {/* Back button */}
@@ -1827,21 +1829,21 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
             type="button"
             onClick={onBack}
             aria-label="Go back"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#3878c2] bg-white shadow-sm"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#1f2937] bg-white shadow-sm"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 text-[#3878c2]">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 text-[#1f2937]">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
             </svg>
           </button>
 
           {/* Autocomplete search */}
-          <div className="relative flex-1 bg-white shadow-sm rounded-lg">
+          <div className="relative flex-1 bg-[#eff8fc] shadow-sm rounded-lg">
             {isMapLoaded ? (
               <Autocomplete onLoad={onLoad} onPlaceChanged={onPlaceChanged}>
                 <input
                   type="text"
                   id="simple-search"
-                  className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#3878c2] bg-white text-[#3878c2] placeholder:text-[#b4b4b4] focus:outline-none focus:ring-1 focus:ring-[#3878c2]"
+                  className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#1f2937] bg-[#eff8fc] text-[#1f2937] placeholder:text-[#b4b4b4] focus:outline-none focus:ring-1 focus:ring-[#1f2937]"
                   placeholder="Search for your address or tap the map..."
                   value={searchValue}
                   onChange={(e) => {
@@ -1859,7 +1861,7 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
               <input
                 type="text"
                 disabled
-                className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#3878c2] bg-gray-100 text-[#b4b4b4]"
+                className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#1f2937] bg-[#eff8fc] text-[#b4b4b4]"
                 placeholder="Loading map..."
               />
             )}
@@ -1868,7 +1870,7 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
       </div>
 
       {/* Map area */}
-      <div className="relative flex-1 min-h-[40vh] mx-2 sm:mx-0 sm:min-h-[50vh] bg-gray-50 overflow-hidden rounded-xl border border-[#3878c2]/20 shadow-inner mb-28">
+      <div className="relative flex-1 min-h-[40vh] mx-2 sm:mx-0 sm:min-h-[50vh] bg-gray-50 overflow-hidden rounded-xl border border-[#1f2937]/20 shadow-inner mb-28">
         {isMapLoaded ? (
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}
@@ -1883,8 +1885,8 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
           </GoogleMap>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#3878c2] mb-2"></div>
-            <span className="text-sm font-semibold text-[#3878c2]">Loading Maps...</span>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1f2937] mb-2"></div>
+            <span className="text-sm font-semibold text-[#1f2937]">Loading Maps...</span>
           </div>
         )}
 
@@ -1892,15 +1894,15 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
         {isGeocoding && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/10 z-10">
             <div className="bg-white px-4 py-2 rounded-lg shadow-md flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#3878c2]"></div>
-              <span className="text-xs text-[#3878c2] font-semibold">Getting address...</span>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#1f2937]"></div>
+              <span className="text-xs text-[#1f2937] font-semibold">Getting address...</span>
             </div>
           </div>
         )}
 
         {/* Tap hint if no location pinned yet */}
         {isMapLoaded && !location.lat && !isGeocoding && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/90 text-[#3878c2] text-xs font-semibold px-4 py-2 rounded-full shadow-md pointer-events-none whitespace-nowrap">
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/90 text-[#1f2937] text-xs font-semibold px-4 py-2 rounded-full shadow-md pointer-events-none whitespace-nowrap">
             📍 Tap the map to pin your location
           </div>
         )}
@@ -1908,7 +1910,7 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
 
       {/* Bottom dock */}
       <div
-        className="fixed sm:absolute bottom-0 left-0 right-0 w-full px-4 pt-4 pb-6 sm:px-6 shadow-[0_-8px_15px_-3px_rgba(0,0,0,0.1)] rounded-t-3xl border-t border-[#3878c2]/20 z-30"
+        className="fixed sm:absolute bottom-0 left-0 right-0 w-full px-4 pt-4 pb-6 sm:px-6 shadow-[0_-8px_15px_-3px_rgba(0,0,0,0.1)] rounded-t-3xl border-t border-[#1f2937]/20 z-30"
         style={{ backgroundColor: "#63bce6" }}
       >
         <div className="mx-auto max-w-2xl text-center">
@@ -1922,7 +1924,7 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
                 type="checkbox"
                 checked={saveHomeAddress}
                 onChange={(e) => setSaveHomeAddress(e.target.checked)}
-                className="w-4 h-4 rounded border-white text-[#3878c2] focus:ring-[#3878c2]"
+                className="w-4 h-4 rounded border-white text-[#1f2937] focus:ring-[#1f2937]"
               />
               <span className="text-sm font-medium">Save as my home address</span>
             </label>
@@ -1930,7 +1932,7 @@ function StepAddress({ onBack, onNext, isMapLoaded, initialLocation, saveHomeAdd
           <button
             onClick={handleNext}
             disabled={!location.lat || isGeocoding}
-            className={`w-full py-3 rounded-lg font-bold transition-all shadow-md ${!location.lat || isGeocoding ? "bg-white/50 text-[#3878c2]/50 cursor-not-allowed" : "bg-white text-[#3878c2] hover:bg-gray-50 active:scale-[0.98]"}`}
+            className={`w-full py-3 rounded-lg font-bold transition-all shadow-md ${!location.lat || isGeocoding ? "bg-white/50 text-[#1f2937]/50 cursor-not-allowed" : "bg-white text-[#1f2937] hover:bg-gray-50 active:scale-[0.98]"}`}
           >
             {isGeocoding ? "Getting address..." : "Confirm this location"}
           </button>

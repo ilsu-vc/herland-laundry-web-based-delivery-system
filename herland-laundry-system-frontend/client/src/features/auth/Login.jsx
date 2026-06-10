@@ -100,7 +100,7 @@ export default function Login() {
           }
         }
 
-        // Strategy 3: Try direct phone sign-in (works if Phone provider is enabled in Supabase)
+        // Strategy 3: Try direct phone login (works if Phone provider is enabled in Supabase)
         if (!foundEmail) {
           let e164Phone = cleanPhone;
           if (e164Phone.startsWith('09')) e164Phone = '63' + e164Phone.substring(1);
@@ -112,7 +112,7 @@ export default function Login() {
           });
 
           if (!phoneSignInError && phoneSignIn?.user) {
-            // Phone sign-in succeeded — redirect based on role
+            // Phone login succeeded — redirect based on role
             const userId = phoneSignIn.user.id;
             const { data: profile } = await supabase
               .from('profiles')
@@ -130,7 +130,7 @@ export default function Login() {
             return;
           }
 
-          // If phone sign-in also fails, show the error
+          // If phone login also fails, show the error
           setError('No account found with this mobile number.');
           return;
         }
@@ -176,17 +176,16 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex h-screen overflow-y-auto bg-slate-50">
       {/* Left side: Hero Image */}
-      <div className="hidden lg:flex w-1/2 relative overflow-hidden bg-[#1a232e]">
+      <div className="hidden lg:flex w-1/2 relative overflow-hidden bg-[#1a232e] min-h-screen">
         <img
           src="https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=1200&q=80"
           alt="Laundry"
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#1a232e] to-transparent opacity-80" />
-        <div className="relative z-10 flex flex-col justify-end p-16 h-full">
-          <img src="/images/SecondaryLogo.png" alt="Herland" className="h-12 w-auto mb-8 bg-white/10 p-2 rounded-xl backdrop-blur-sm self-start" />
+        <div className="relative z-10 flex flex-col justify-end p-16 pb-28 h-full">
           <h1 className="text-4xl xl:text-5xl font-black text-white mb-4 leading-tight">Fresh Clothes,<br/>Less Hassle.</h1>
           <p className="text-lg text-gray-300 max-w-md bg-black/20 p-4 rounded-xl backdrop-blur-sm border border-white/10">
             Log in to manage your bookings, schedule pickups, and experience the easiest laundry service in town.
@@ -195,12 +194,11 @@ export default function Login() {
       </div>
 
       {/* Right side: Form shrink adjustments */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 xl:p-20 relative overflow-y-auto">
-        <div className="w-full max-w-md space-y-6">
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 xl:p-20 relative">
+        <div className="w-full max-w-md space-y-6 pb-24">
           <div className="text-center lg:text-left">
-            <img src="/images/PrimaryLogo.png" alt="Herland Laundry" className="h-14 w-auto mx-auto lg:mx-0 mb-4 lg:hidden" />
             <h2 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">Welcome back</h2>
-            <p className="mt-2 text-sm text-gray-500 font-medium">Please enter your credentials to sign in.</p>
+            <p className="mt-2 text-sm text-gray-500 font-medium">Please enter your credentials to login.</p>
           </div>
 
           <div className="bg-white p-5 sm:p-7 rounded-2xl shadow-xl shadow-gray-200/50 ring-1 ring-gray-100">
@@ -314,7 +312,7 @@ export default function Login() {
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
                 }`}
               >
-                {loading ? 'Authenticating...' : 'Sign In'}
+                {loading ? 'Authenticating...' : 'Login'}
               </button>
             </form>
 

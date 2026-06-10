@@ -172,7 +172,6 @@ export default function Signup() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#1a232e] to-transparent opacity-80" />
         <div className="relative z-10 flex flex-col justify-end p-16 h-full">
-          <img src="/images/SecondaryLogo.png" alt="Herland" className="h-12 w-auto mb-8 bg-white/10 p-2 rounded-xl backdrop-blur-sm self-start" />
           <h1 className="text-4xl xl:text-5xl font-black text-white mb-4 leading-tight">Join Us Today,<br/>Wash Less Tomorrow.</h1>
           <p className="text-lg text-gray-300 max-w-md bg-black/20 p-4 rounded-xl backdrop-blur-sm border border-white/10">
             Create an account to track your orders, manage preferences, and get your clothes cleaned with just a few clicks.
@@ -184,7 +183,6 @@ export default function Signup() {
       <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 xl:p-20 relative overflow-y-auto">
         <div className="w-full max-w-md space-y-6">
           <div className="text-center lg:text-left">
-            <img src="/images/PrimaryLogo.png" alt="Herland Laundry" className="h-14 w-auto mx-auto lg:mx-0 mb-4 lg:hidden" />
             <h2 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">Create an account</h2>
             <p className="mt-2 text-sm text-gray-500 font-medium">Please enter your details to get started.</p>
           </div>
@@ -358,7 +356,7 @@ export default function Signup() {
                         onClick={() => navigate('/login')}
                         className="text-[#3878c2] font-bold hover:text-[#2a5d99] hover:underline transition-colors"
                     >
-                        Sign in instead
+                        Login instead
                     </button>
                 </p>
             </div>
