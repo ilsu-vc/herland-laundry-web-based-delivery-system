@@ -49,98 +49,7 @@ const typography = {
   },
 };
 
-const MOCK_FEEDBACK = [
-  {
-    id: 'mock-1',
-    referenceNumber: 'HL-1234-5678',
-    customerName: 'Maria Santos',
-    initials: 'MS',
-    riderName: 'John Dela Cruz',
-    service: 'Wash, Dry, Fold',
-    addOns: 'Fabric Conditioner',
-    laundryRating: 5,
-    riderRating: 5,
-    laundryTags: ['Clean & Fresh', 'Neat Folding', 'Complete Items'],
-    riderTags: ['On Time', 'Polite', 'Friendly'],
-    comment: 'Everything was perfect! My clothes came back smelling amazing.',
-    createdAt: '2026-06-08T10:00:00Z',
-  },
-  {
-    id: 'mock-2',
-    referenceNumber: 'HL-2345-6789',
-    customerName: 'Juan Dela Cruz',
-    initials: 'JD',
-    riderName: 'Carlo Ramos',
-    service: 'Wash & Dry',
-    addOns: 'None',
-    laundryRating: 4,
-    riderRating: 5,
-    laundryTags: ['Clean & Fresh', 'Good Value'],
-    riderTags: ['On Time', 'Easy to Contact'],
-    comment: 'Great service overall. Clothes were clean and price is reasonable.',
-    createdAt: '2026-06-06T11:30:00Z',
-  },
-  {
-    id: 'mock-3',
-    referenceNumber: 'HL-3456-7890',
-    customerName: 'Ana Reyes',
-    initials: 'AR',
-    riderName: 'Mark Villanueva',
-    service: 'Wash, Dry, Fold',
-    addOns: 'Detergent',
-    laundryRating: 5,
-    riderRating: 4,
-    laundryTags: ['Clean & Fresh', 'No Damage', 'Good Value'],
-    riderTags: ['Friendly', 'Careful Handling'],
-    comment: 'Highly recommend! Fast turnaround and clothes treated with care.',
-    createdAt: '2026-06-04T09:15:00Z',
-  },
-  {
-    id: 'mock-4',
-    referenceNumber: 'HL-4567-8901',
-    customerName: 'Carlo Mendoza',
-    initials: 'CM',
-    riderName: 'John Dela Cruz',
-    service: 'Wash Only',
-    addOns: 'None',
-    laundryRating: 3,
-    riderRating: 3,
-    laundryTags: ['Poor Cleaning'],
-    riderTags: ['Late Pickup/Delivery'],
-    comment: 'Some clothes did not smell as fresh as expected. Rider arrived late.',
-    createdAt: '2026-06-02T14:00:00Z',
-  },
-  {
-    id: 'mock-5',
-    referenceNumber: 'HL-5678-9012',
-    customerName: 'Liza Gonzales',
-    initials: 'LG',
-    riderName: 'Carlo Ramos',
-    service: 'Wash, Dry, Fold',
-    addOns: 'Fabric Conditioner, Detergent',
-    laundryRating: 5,
-    riderRating: 5,
-    laundryTags: ['Clean & Fresh', 'Neat Folding', 'Complete Items', 'No Damage'],
-    riderTags: ['On Time', 'Polite', 'Friendly'],
-    comment: 'Best laundry service I have tried! Handled with care.',
-    createdAt: '2026-05-30T13:00:00Z',
-  },
-  {
-    id: 'mock-6',
-    referenceNumber: 'HL-7890-1234',
-    customerName: 'Rosa Padilla',
-    initials: 'RP',
-    riderName: 'Carlo Ramos',
-    service: 'Wash, Dry, Fold',
-    addOns: 'Detergent',
-    laundryRating: 2,
-    riderRating: 2,
-    laundryTags: ['Poorly Folded', 'Missing Items'],
-    riderTags: ['Hard to Contact', 'Rude Behavior'],
-    comment: 'Clothes were not folded properly and two shirts were missing.',
-    createdAt: '2026-05-25T16:45:00Z',
-  },
-];
+const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/admin`;
 
 const EMPTY_FILTERS = {
   feedbackType: 'all',
@@ -793,7 +702,6 @@ export default function FeedbackReports() {
 
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
-  const [usingMockData, setUsingMockData] = useState(false);
 
   useEffect(() => {
     fetchFeedbackReports();
@@ -804,40 +712,25 @@ export default function FeedbackReports() {
     setErrorMessage('');
 
     try {
-      const [
-        customerFeedbackResult,
-        riderFeedbackResult,
-        bookingsResult,
-        profilesResult,
-      ] = await Promise.all([
-        supabase
-          .from('customer_feedback')
-          .select('id, booking_id, user_id, rating, review_comment, review_tags, created_at')
-          .order('created_at', { ascending: false }),
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      const response = await fetch(`${API_BASE}/feedback-reports`, {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` })
+        }
+      });
 
-        supabase
-          .from('rider_feedback')
-          .select('id, booking_id, rider_id, rating, review_tags, created_at')
-          .order('created_at', { ascending: false }),
+      if (!response.ok) {
+        throw new Error('Failed to fetch feedback reports');
+      }
 
-        supabase
-          .from('bookings')
-          .select('id, reference_number, user_id, rider_id, service_type, service_details, amount_to_pay, status, created_at'),
+      const data = await response.json();
 
-        supabase
-          .from('profiles')
-          .select('id, full_name, email, avatar_url, role'),
-      ]);
-
-      if (customerFeedbackResult.error) throw customerFeedbackResult.error;
-      if (riderFeedbackResult.error) throw riderFeedbackResult.error;
-      if (bookingsResult.error) throw bookingsResult.error;
-      if (profilesResult.error) throw profilesResult.error;
-
-      setCustomerFeedback(customerFeedbackResult.data || []);
-      setRiderFeedback(riderFeedbackResult.data || []);
-      setBookings(bookingsResult.data || []);
-      setProfiles(profilesResult.data || []);
+      setCustomerFeedback(data.customerFeedback || []);
+      setRiderFeedback(data.riderFeedback || []);
+      setBookings(data.bookings || []);
+      setProfiles(data.profiles || []);
     } catch (error) {
       console.error('Error loading feedback reports:', error);
       setErrorMessage(error?.message || 'Unable to load feedback reports.');
@@ -917,16 +810,8 @@ export default function FeedbackReports() {
   }, [customerFeedback, riderFeedback, bookingMap, profileMap]);
 
   const records = useMemo(() => {
-    if (supabaseRecords.length > 0) {
-      return supabaseRecords;
-    }
-
-    return MOCK_FEEDBACK;
+    return supabaseRecords;
   }, [supabaseRecords]);
-
-  useEffect(() => {
-    setUsingMockData(!loading && supabaseRecords.length === 0);
-  }, [loading, supabaseRecords]);
 
   const filteredRecords = useMemo(() => {
     return records.filter(record => {
@@ -1004,26 +889,6 @@ export default function FeedbackReports() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-        {usingMockData && (
-          <div
-            style={{
-              ...card,
-              padding: '0.875rem 1rem',
-              background: Colors.skyFaint,
-            }}
-          >
-            <p
-              style={{
-                margin: 0,
-                color: Colors.blue,
-                fontSize: '0.875rem',
-                fontWeight: 800,
-              }}
-            >
-              Showing mock feedback data because your Supabase feedback tables are currently empty.
-            </p>
-          </div>
-        )}
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <SummaryCard
@@ -1237,21 +1102,6 @@ export default function FeedbackReports() {
                   Combined laundry and rider reviews per booking.
                 </p>
               </div>
-
-              <span
-                style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 800,
-                  color: Colors.blue,
-                  background: Colors.skyFaint,
-                  border: `1px solid ${Colors.skyBd}`,
-                  borderRadius: 999,
-                  padding: '4px 10px',
-                  flexShrink: 0,
-                }}
-              >
-                {filteredRecords.length}
-              </span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

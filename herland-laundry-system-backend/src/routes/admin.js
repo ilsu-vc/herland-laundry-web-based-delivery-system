@@ -4,6 +4,51 @@ const supabase = require('../config/supabase');
 const { verifyRole } = require('../middleware/auth');
 const notificationService = require('../services/notificationService');
 
+// Route: Get Feedback Reports
+router.get('/feedback-reports', verifyRole('Admin'), async (req, res) => {
+    try {
+        const [
+            customerFeedbackResult,
+            riderFeedbackResult,
+            bookingsResult,
+            profilesResult,
+        ] = await Promise.all([
+            supabase
+                .from('customer_feedback')
+                .select('id, booking_id, user_id, rating, review_comment, review_tags, created_at')
+                .order('created_at', { ascending: false }),
+
+            supabase
+                .from('rider_feedback')
+                .select('id, booking_id, rider_id, rating, review_tags, created_at')
+                .order('created_at', { ascending: false }),
+
+            supabase
+                .from('bookings')
+                .select('id, reference_number, user_id, rider_id, service_type, service_details, amount_to_pay, status, created_at'),
+
+            supabase
+                .from('profiles')
+                .select('id, full_name, email, avatar_url, role'),
+        ]);
+
+        if (customerFeedbackResult.error) throw customerFeedbackResult.error;
+        if (riderFeedbackResult.error) throw riderFeedbackResult.error;
+        if (bookingsResult.error) throw bookingsResult.error;
+        if (profilesResult.error) throw profilesResult.error;
+
+        res.json({
+            customerFeedback: customerFeedbackResult.data || [],
+            riderFeedback: riderFeedbackResult.data || [],
+            bookings: bookingsResult.data || [],
+            profiles: profilesResult.data || []
+        });
+    } catch (error) {
+        console.error('Feedback Reports Error:', error.message);
+        res.status(500).json({ error: 'Internal server error while fetching feedback reports.' });
+    }
+});
+
 // Route: Get total revenue and booking counts
 router.get('/dashboard-stats', verifyRole('Admin'), async (req, res) => {
     try {

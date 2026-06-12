@@ -9,6 +9,59 @@ import { useConfirm } from "../../../shared/components/ConfirmationModal";
 const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/customer`;
 const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
 
+const STATUS_META = {
+  BookingReceived:           { label: 'Booking Received' },
+  BookingAccepted:           { label: 'Booking Accepted' },
+  BookingEdited:             { label: 'Booking Edited' },
+  PaymentConfirmed:          { label: 'Payment Confirmed' },
+  RiderDispatchedForPickup:  { label: 'Rider Dispatch for Pickup' },
+  PickedUpFromCustomer:      { label: 'Picked Up from Customer' },
+  InProgress:                { label: 'Laundry In Progress' },
+  OutForDelivery:            { label: 'Out for Delivery' },
+  ReadyForPickup:            { label: 'Ready for Pick-up' },
+  LaundryDelivered:          { label: 'Laundry Delivered' },
+  BookingCompleted:          { label: 'Booking Completed' },
+  FeedbackSubmitted:         { label: 'Feedback Submitted' },
+  BookingCancelled:          { label: 'Booking Cancelled' },
+  PaymentFlagged:            { label: 'Payment Flagged' },
+};
+
+const STATUS_LABEL_TO_KEY = Object.entries(STATUS_META).reduce((acc, [key, meta]) => {
+  acc[meta.label] = key;
+  return acc;
+}, {});
+
+const ACTION_EFFECTS = {
+  BookingReceived: { actionLabel: 'Accept Booking', status: 'Booking Accepted', nextStage: 'payment' },
+  BookingAccepted: { actionLabel: 'Confirm Payment', status: 'Payment Confirmed', nextStage: 'dynamic' },
+  BookingEdited: { actionLabel: 'Confirm Payment', status: 'Payment Confirmed', nextStage: 'dynamic' },
+  PaymentConfirmed: { actionLabel: 'Dispatch Rider for Pickup', status: 'Rider Dispatched for Pickup', nextStage: 'shipping' },
+  RiderDispatchedForPickup: { actionLabel: 'Confirm Pick Up', status: 'Picked Up from Customer', nextStage: 'shipping' },
+  PickedUpFromCustomer: { actionLabel: 'Start Laundry', status: 'Laundry In Progress', nextStage: 'preparation' },
+  InProgress: { actionLabel: 'Dispatch Rider for Delivery', status: 'Out for Delivery', nextStage: 'shipping' },
+  OutForDelivery: { actionLabel: 'Confirm Delivery', status: 'Laundry Delivered', nextStage: 'shipping' },
+  ReadyForPickup: { actionLabel: 'Complete Booking', status: 'Booking Completed', nextStage: 'final' },
+  LaundryDelivered: { actionLabel: 'Complete Booking', status: 'Booking Completed', nextStage: 'final' },
+};
+
+function getStatusKey(status) {
+  if (!status) return 'BookingReceived';
+  if (STATUS_META[status]) return status;
+  return STATUS_LABEL_TO_KEY[status] || status.replace(/\s+/g, '');
+}
+
+function getLatestStatusFromTimeline(timeline) {
+  if (!Array.isArray(timeline) || timeline.length === 0) return '';
+  const latest = timeline[timeline.length - 1];
+  return latest?.status || '';
+}
+
+function getBookingStatusKey(booking) {
+  if (!booking) return '';
+  const latestTimelineStatus = getLatestStatusFromTimeline(booking.timeline);
+  return getStatusKey(latestTimelineStatus || booking.status || booking.stage);
+}
+
 export default function BookingDetails() {
   const navigate = useNavigate();
   const { bookingId } = useParams();
@@ -19,6 +72,9 @@ export default function BookingDetails() {
   const [error, setError] = useState("");
   const [editTimeLeft, setEditTimeLeft] = useState(null); // seconds remaining, null = not computed yet
   const editWarningShown = useRef(false);
+
+  const activeRole = String(window.sessionStorage.getItem('activeRole') || '').toLowerCase();
+  const isAdminOrStaff = activeRole === 'admin' || activeRole === 'staff';
 
   const fetchBooking = useCallback(async () => {
     try {
@@ -140,7 +196,91 @@ export default function BookingDetails() {
     navigate(`/book?edit=${bookingId}`);
   };
 
+  const handleNextStatus = async () => {
+    const statusKey = getBookingStatusKey(booking);
+    let action = { ...ACTION_EFFECTS[statusKey] };
 
+    // Dynamic bypass for Drop-off vs Pickup workflows
+    const isPickupRequired = booking.collectionOption === 'pickedUpDelivered';
+    const isDeliveryRequired = booking.collectionOption === 'dropOffDelivered' || booking.collectionOption === 'pickedUpDelivered';
+
+    if (statusKey === 'PaymentConfirmed' && !isPickupRequired) {
+      action = { actionLabel: 'Start Laundry', status: 'Laundry In Progress', nextStage: 'preparation' };
+    }
+
+    if (statusKey === 'InProgress' && !isDeliveryRequired) {
+      action = { actionLabel: 'Mark Ready for Pick-up', status: 'Ready for Pick-up', nextStage: 'final' };
+    }
+
+    if (!action || !action.status) {
+      showToast("No available next status for this booking.", "error");
+      return;
+    }
+
+    if (!(await confirm(`Are you sure you want to advance the status to "${action.status}"?`))) return;
+
+    const payment = booking.paymentDetails || booking.payment_details || {};
+    const paymentMethod = payment.method || 'GCash';
+
+    if (
+      action.status === 'Payment Confirmed' &&
+      paymentMethod === 'GCash' &&
+      !payment.referenceNumber
+    ) {
+      showToast('GCash reference number is required before confirming payment.', 'error');
+      return;
+    }
+
+    const nextStage =
+      action.nextStage === 'dynamic'
+        ? booking.collectionOption === 'pickedUpDelivered' || booking.collection_option === 'pickedUpDelivered'
+          ? 'shipping'
+          : 'preparation'
+        : action.nextStage;
+
+    const newTimeline = [
+      ...(Array.isArray(booking.timeline) ? booking.timeline : []),
+      {
+        status: action.status,
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        showToast("Session expired. Please log in again.", "error");
+        return;
+      }
+
+      const ADMIN_API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/admin`;
+      
+      const response = await fetch(`${ADMIN_API_BASE}/bookings/${bookingId}/status`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: action.status,
+          nextStage,
+          timeline: newTimeline,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update booking status.');
+      }
+
+      showToast(`Booking updated to ${action.status}.`, "success");
+      fetchBooking();
+    } catch (err) {
+      console.error("Error updating status:", err);
+      showToast("Could not update the booking status.", "error");
+    }
+  };
 
   const buildFullTimeline = (bk) => {
     if (!bk) return [];
@@ -168,15 +308,21 @@ export default function BookingDetails() {
       "Payment Confirmed",
     ];
 
-    // For pickedUpDelivered: rider picks up first, then laundry is processed
     if (isPickupRequired) {
       futureSteps.push("Rider Dispatched for Pickup");
       futureSteps.push("Picked Up from Customer");
     }
 
-    futureSteps.push("In Progress");
-    futureSteps.push(isDelivery ? "Out for Delivery" : "Ready for Pick-up");
-    futureSteps.push("Laundry Delivered");
+    futureSteps.push("Laundry In Progress");
+
+    if (isDelivery) {
+      futureSteps.push("Out for Delivery");
+      futureSteps.push("Laundry Delivered");
+    } else {
+      futureSteps.push("Ready for Pick-up");
+    }
+
+    futureSteps.push("Booking Completed");
     futureSteps.push("Feedback Submitted");
 
     // Add any future steps that haven't been reached yet (with null timestamp)
@@ -255,6 +401,14 @@ export default function BookingDetails() {
           </button>
           <h1 className="text-2xl font-semibold">Booking Details</h1>
           <div className="ml-auto flex gap-2">
+            {isAdminOrStaff && booking && ACTION_EFFECTS[getBookingStatusKey(booking)] && (
+              <button
+                onClick={handleNextStatus}
+                className="rounded-lg border border-[#3878c2] bg-[#3878c2] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#2d62a3] shadow-sm transition"
+              >
+                Next: {ACTION_EFFECTS[getBookingStatusKey(booking)].actionLabel}
+              </button>
+            )}
             {booking?.status?.toLowerCase() !== "cancelled" && (
               <button
                 onClick={() => navigate(`/bookings/${bookingId}/receipt`)}
@@ -483,6 +637,16 @@ export default function BookingDetails() {
                     {booking?.paymentDetails?.status || "Pending"}
                   </span>
                 </div>
+                {isAdminOrStaff && booking?.paymentDetails?.method === "GCash" && booking?.paymentDetails?.referenceNumber && (
+                  <div className="sm:col-span-2 mt-2">
+                    <p className="text-xs font-semibold uppercase text-[#b4b4b4]">
+                      GCash Reference Number
+                    </p>
+                    <p className="mt-1 text-xl font-black text-[#374151] font-mono tracking-wider">
+                      {booking.paymentDetails.referenceNumber}
+                    </p>
+                  </div>
+                )}
                 <div className="sm:col-span-2 space-y-3 mt-2 border-t border-[#f0f0f0] pt-4">
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-[#b4b4b4] font-semibold uppercase text-xs">Total Amount</span>
@@ -519,30 +683,79 @@ export default function BookingDetails() {
             {(booking?.status?.toLowerCase() === "delivered" || booking?.status?.toLowerCase() === "completed" || booking?.status?.toLowerCase() === "booking completed") && (
               <div className="rounded-2xl border border-[#3878c2]/20 bg-white p-6 shadow-sm">
                 <h3 className="mb-4 text-lg font-semibold text-[#3878c2]">
-                  Your Experience
+                  {isAdminOrStaff ? "Customer Feedback" : "Your Experience"}
                 </h3>
 
-                {(booking.customer_feedback || booking.rider_feedback) ? (
-                  <div className="space-y-4 text-center py-6">
-                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-[#4bad40] mb-2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
-                     </svg>
-                    <p className="text-lg font-semibold text-[#374151]">Feedback Submitted</p>
-                    <p className="text-sm text-[#b4b4b4]">Thank you for sharing your experience with us!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <p className="text-sm text-[#374151]">
-                      How was our service? Your feedback helps us improve!
-                    </p>
+                {(booking.customer_feedback || booking.rider_feedback || booking.customerFeedback || booking.riderFeedback) ? (
+                  isAdminOrStaff ? (
+                    <div className="space-y-4">
+                      {/* Render Customer Feedback */}
+                      {(booking.customer_feedback || booking.customerFeedback) && (
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                          <p className="text-sm font-bold text-[#374151] mb-2">Service Feedback</p>
+                          <div className="flex items-center mb-2">
+                            <span className="text-[#f59e0b] font-bold text-lg mr-1">★</span>
+                            <span className="font-semibold text-[#374151]">{(booking.customer_feedback || booking.customerFeedback).rating} / 5</span>
+                          </div>
+                          {(booking.customer_feedback || booking.customerFeedback).review_tags?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {(booking.customer_feedback || booking.customerFeedback).review_tags.map(tag => (
+                                <span key={tag} className="text-[10px] bg-[#3878c2]/10 text-[#3878c2] px-2 py-1 rounded-full uppercase font-semibold">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                          {(booking.customer_feedback || booking.customerFeedback).review_comment && (
+                            <p className="text-sm text-[#374151] italic">"{(booking.customer_feedback || booking.customerFeedback).review_comment}"</p>
+                          )}
+                        </div>
+                      )}
 
-                    <button
-                      onClick={() => navigate(`/feedback/${bookingId}`)}
-                      className="w-full rounded-xl bg-[#3878c2] py-3 text-sm font-bold text-white shadow-md hover:bg-[#2d62a3] transition-all"
-                    >
-                      Submit Feedback
-                    </button>
-                  </div>
+                      {/* Render Rider Feedback */}
+                      {(booking.rider_feedback || booking.riderFeedback) && (
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mt-3">
+                          <p className="text-sm font-bold text-[#374151] mb-2">Rider Feedback</p>
+                          <div className="flex items-center mb-2">
+                            <span className="text-[#f59e0b] font-bold text-lg mr-1">★</span>
+                            <span className="font-semibold text-[#374151]">{(booking.rider_feedback || booking.riderFeedback).rating} / 5</span>
+                          </div>
+                          {(booking.rider_feedback || booking.riderFeedback).review_tags?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {(booking.rider_feedback || booking.riderFeedback).review_tags.map(tag => (
+                                <span key={tag} className="text-[10px] bg-[#3878c2]/10 text-[#3878c2] px-2 py-1 rounded-full uppercase font-semibold">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-4 text-center py-6">
+                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-[#4bad40] mb-2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                       </svg>
+                      <p className="text-lg font-semibold text-[#374151]">Feedback Submitted</p>
+                      <p className="text-sm text-[#b4b4b4]">Thank you for sharing your experience with us!</p>
+                    </div>
+                  )
+                ) : (
+                  isAdminOrStaff ? (
+                    <div className="space-y-4 text-center py-6">
+                      <p className="text-sm font-medium text-[#b4b4b4]">Waiting for customer to submit feedback.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-sm text-[#374151]">
+                        How was our service? Your feedback helps us improve!
+                      </p>
+
+                      <button
+                        onClick={() => navigate(`/feedback/${bookingId}`)}
+                        className="w-full rounded-xl bg-[#3878c2] py-3 text-sm font-bold text-white shadow-md hover:bg-[#2d62a3] transition-all"
+                      >
+                        Submit Feedback
+                      </button>
+                    </div>
+                  )
                 )}
               </div>
             )}

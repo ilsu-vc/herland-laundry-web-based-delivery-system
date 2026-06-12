@@ -267,20 +267,47 @@ export default function RiderDashboard() {
     fetchDashboardData();
   }, []);
 
-  const assignedTasksToday = useMemo(() => {
-    return assignedBookings.filter((booking) => {
-      return isTodayTask(booking) && isActiveAssignedTask(booking);
-    });
+  const [dashboardFilter, setDashboardFilter] = useState('Today');
+
+  const activeAssignedTasks = useMemo(() => {
+    return assignedBookings.filter(isActiveAssignedTask);
   }, [assignedBookings]);
 
-  const completedTasksToday = useMemo(() => {
-    return assignedBookings.filter((booking) => {
-      return isTodayTask(booking) && isCompletedTask(booking);
-    });
+  const completedTasks = useMemo(() => {
+    return assignedBookings.filter(isCompletedTask);
   }, [assignedBookings]);
 
-  const allAssignedTasksToday = useMemo(() => {
-    return assignedBookings.filter(isTodayTask);
+  const categorizedTasks = useMemo(() => {
+    const past = [];
+    const todayTasks = [];
+    const upcoming = [];
+    const today = toDateOnly(new Date());
+
+    assignedBookings.forEach(task => {
+      const type = STATUS_META[task.status]?.type || '';
+      let taskDate = '';
+      
+      if (type === 'Pickup') {
+        taskDate = toDateOnly(task.pickupDate);
+      } else if (type === 'Delivery') {
+        taskDate = toDateOnly(task.deliveryDate);
+      } else {
+        taskDate = toDateOnly(task.pickupDate) || toDateOnly(task.deliveryDate);
+      }
+
+      if (!taskDate) {
+        todayTasks.push(task);
+      } else if (taskDate < today) {
+        past.push(task);
+      } else if (taskDate === today) {
+        todayTasks.push(task);
+      } else {
+        upcoming.push(task);
+      }
+    });
+
+    // Sort them if needed, but for now just returning them
+    return { past, todayTasks, upcoming };
   }, [assignedBookings]);
 
   return (
@@ -323,7 +350,7 @@ export default function RiderDashboard() {
                 className="block text-3xl font-black"
                 style={{ color: Colors.blue }}
               >
-                {assignedTasksToday.length}
+                {activeAssignedTasks.length}
               </span>
               <p
                 style={{
@@ -346,7 +373,7 @@ export default function RiderDashboard() {
                   className="mt-3 block text-3xl font-black"
                   style={{ color: Colors.blue }}
                 >
-                  {assignedTasksToday.length}
+                  {activeAssignedTasks.length}
                 </span>
               </div>
 
@@ -383,7 +410,7 @@ export default function RiderDashboard() {
                 className="block text-3xl font-black"
                 style={{ color: Colors.green }}
               >
-                {completedTasksToday.length}
+                {completedTasks.length}
               </span>
               <p
                 style={{
@@ -406,7 +433,7 @@ export default function RiderDashboard() {
                   className="mt-3 block text-3xl font-black"
                   style={{ color: Colors.green }}
                 >
-                  {completedTasksToday.length}
+                  {completedTasks.length}
                 </span>
               </div>
 
@@ -437,8 +464,8 @@ export default function RiderDashboard() {
         <div className="grid grid-cols-1 gap-8">
           <div>
             <div style={card} className="p-6">
-              <div className="mb-6 flex items-center justify-between gap-4">
-                <h2 style={typography.h2}>All Tasks Today</h2>
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <h2 style={typography.h2}>Active Tasks</h2>
                 <button
                   onClick={() => navigate('/rider/manage-tasks')}
                   className="rounded-lg px-4 py-2 transition-all duration-150"
@@ -453,85 +480,147 @@ export default function RiderDashboard() {
                 </button>
               </div>
 
+              {/* Filters */}
+              <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
+                {['Today', 'Past', 'Upcoming', 'All'].map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setDashboardFilter(filter)}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '2rem',
+                      fontSize: '0.8125rem',
+                      fontWeight: 700,
+                      background: dashboardFilter === filter ? Colors.blue : 'rgba(107,139,174,0.1)',
+                      color: dashboardFilter === filter ? '#fff' : Colors.blueMuted,
+                      border: `1px solid ${dashboardFilter === filter ? Colors.blue : 'transparent'}`,
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {filter === 'Past' ? 'Past (Overdue)' : filter}
+                  </button>
+                ))}
+              </div>
+
               <div className="max-h-[600px] overflow-y-auto">
-                {!loading && allAssignedTasksToday.length === 0 && (
+                {!loading && assignedBookings.length === 0 && (
                   <div className="py-8 text-center">
                     <p style={{ fontSize: '0.9375rem', color: Colors.blueMuted }}>
-                      No assigned tasks for today.
+                      No assigned tasks.
                     </p>
                   </div>
                 )}
 
-                {allAssignedTasksToday.map((booking, index) => {
-                  const taskMeta = meta(booking);
+                {/* Helper component for rendering a section */}
+                {(() => {
+                  const renderSection = (title, tasks, color) => {
+                    if (tasks.length === 0) {
+                      // Only show the empty message if it's the specific filter being viewed
+                      if (dashboardFilter !== 'All' && title.includes(dashboardFilter) || (dashboardFilter === 'Past' && title.includes('Past'))) {
+                         return (
+                           <div className="py-8 text-center">
+                             <p style={{ fontSize: '0.9375rem', color: Colors.blueMuted }}>
+                               No {dashboardFilter.toLowerCase()} tasks found.
+                             </p>
+                           </div>
+                         );
+                      }
+                      return null;
+                    }
+
+                    // If a specific filter is selected (not 'All'), don't render other sections
+                    if (dashboardFilter === 'Past' && !title.includes('Past')) return null;
+                    if (dashboardFilter === 'Today' && !title.includes('Today')) return null;
+                    if (dashboardFilter === 'Upcoming' && !title.includes('Upcoming')) return null;
+
+                    return (
+                      <div className="mb-6 last:mb-0">
+                        <div className="mb-3 border-b border-gray-100 pb-2">
+                          <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {title} ({tasks.length})
+                          </h3>
+                        </div>
+                        {tasks.map((booking, index) => {
+                          const taskMeta = meta(booking);
+                          return (
+                            <div key={booking.dbId || booking.id}>
+                              <button
+                                onClick={() => navigate('/rider/manage-tasks')}
+                                className="w-full py-4 text-left transition-all duration-150 hover:bg-gray-50/50"
+                              >
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                  <span style={{ fontSize: '0.875rem', fontWeight: 700, color: Colors.blue }}>
+                                    #{booking.id}
+                                  </span>
+                                  <span
+                                    className="rounded-full px-3 py-1 text-xs font-semibold"
+                                    style={{
+                                      background: taskMeta.bg,
+                                      color: taskMeta.color,
+                                      border: `1px solid ${taskMeta.color}`,
+                                    }}
+                                  >
+                                    {taskMeta.label}
+                                  </span>
+                                </div>
+
+                                <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: Colors.blue }}>
+                                  {booking.customerName}
+                                </p>
+
+                                <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                                  <div>
+                                    <p style={{ fontSize: '0.7rem', fontWeight: 700, color: Colors.blueMuted }}>
+                                      Pickup
+                                    </p>
+                                    <p style={{ fontSize: '0.8125rem', color: '#1f2937' }}>
+                                      {booking.pickupAddress}
+                                    </p>
+                                    {(booking.pickupDate || booking.pickupTime) && (
+                                      <p style={{ fontSize: '0.75rem', color: Colors.blue, marginTop: 2 }}>
+                                        {booking.pickupDate ? formatDate(booking.pickupDate) : ''}
+                                        {booking.pickupDate && booking.pickupTime ? ' • ' : ''}
+                                        {booking.pickupTime ? formatTime(booking.pickupTime) : ''}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div>
+                                    <p style={{ fontSize: '0.7rem', fontWeight: 700, color: Colors.blueMuted }}>
+                                      Delivery
+                                    </p>
+                                    <p style={{ fontSize: '0.8125rem', color: '#1f2937' }}>
+                                      {booking.deliveryAddress}
+                                    </p>
+                                    {(booking.deliveryDate || booking.deliveryTime) && (
+                                      <p style={{ fontSize: '0.75rem', color: Colors.blue, marginTop: 2 }}>
+                                        {booking.deliveryDate ? formatDate(booking.deliveryDate) : ''}
+                                        {booking.deliveryDate && booking.deliveryTime ? ' • ' : ''}
+                                        {booking.deliveryTime ? formatTime(booking.deliveryTime) : ''}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+
+                              {index < tasks.length - 1 && (
+                                <div style={{ height: '1px', background: Colors.blue, opacity: 0.1 }} />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  };
 
                   return (
-                    <div key={booking.dbId || booking.id}>
-                      <button
-                        onClick={() => navigate('/rider/manage-tasks')}
-                        className="w-full py-4 text-left transition-all duration-150 hover:bg-gray-50/50"
-                      >
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: Colors.blue }}>
-                            #{booking.id}
-                          </span>
-                          <span
-                            className="rounded-full px-3 py-1 text-xs font-semibold"
-                            style={{
-                              background: taskMeta.bg,
-                              color: taskMeta.color,
-                              border: `1px solid ${taskMeta.color}`,
-                            }}
-                          >
-                            {taskMeta.label}
-                          </span>
-                        </div>
-
-                        <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: Colors.blue }}>
-                          {booking.customerName}
-                        </p>
-
-                        <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                          <div>
-                            <p style={{ fontSize: '0.7rem', fontWeight: 700, color: Colors.blueMuted }}>
-                              Pickup
-                            </p>
-                            <p style={{ fontSize: '0.8125rem', color: '#1f2937' }}>
-                              {booking.pickupAddress}
-                            </p>
-                            {(booking.pickupDate || booking.pickupTime) && (
-                              <p style={{ fontSize: '0.75rem', color: Colors.blue, marginTop: 2 }}>
-                                {booking.pickupDate ? formatDate(booking.pickupDate) : ''}
-                                {booking.pickupDate && booking.pickupTime ? ' • ' : ''}
-                                {booking.pickupTime ? formatTime(booking.pickupTime) : ''}
-                              </p>
-                            )}
-                          </div>
-
-                          <div>
-                            <p style={{ fontSize: '0.7rem', fontWeight: 700, color: Colors.blueMuted }}>
-                              Delivery
-                            </p>
-                            <p style={{ fontSize: '0.8125rem', color: '#1f2937' }}>
-                              {booking.deliveryAddress}
-                            </p>
-                            {(booking.deliveryDate || booking.deliveryTime) && (
-                              <p style={{ fontSize: '0.75rem', color: Colors.blue, marginTop: 2 }}>
-                                {booking.deliveryDate ? formatDate(booking.deliveryDate) : ''}
-                                {booking.deliveryDate && booking.deliveryTime ? ' • ' : ''}
-                                {booking.deliveryTime ? formatTime(booking.deliveryTime) : ''}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-
-                      {index < allAssignedTasksToday.length - 1 && (
-                        <div style={{ height: '1px', background: Colors.blue, opacity: 0.2 }} />
-                      )}
-                    </div>
+                    <>
+                      {renderSection("Past (Overdue)", categorizedTasks.past, Colors.red)}
+                      {renderSection("Tasks for Today", categorizedTasks.todayTasks, Colors.green)}
+                      {renderSection("Upcoming", categorizedTasks.upcoming, Colors.blue)}
+                    </>
                   );
-                })}
+                })()}
               </div>
             </div>
           </div>

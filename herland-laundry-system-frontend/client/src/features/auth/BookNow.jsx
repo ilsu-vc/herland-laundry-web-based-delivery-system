@@ -1379,6 +1379,7 @@ function ScheduleCard({ title, dateLabel, date, onDateChange, slot, onSlotChange
             value={date}
             min={minScheduleDate}
             onChange={(event) => onDateChange(event.target.value)}
+            onClick={(e) => e.target.showPicker && e.target.showPicker()}
             style={{
               width: "100%",
               border: `1.5px solid ${date ? "#3878c2" : "#e5e7eb"}`,
@@ -1555,16 +1556,19 @@ function StepSchedule({
   ]);
 
   function updatePickupDate(date) {
-    setCollectionInfo((previous) => ({
-      ...previous,
-      option: "pickedUpDelivered",
-      optionLabel,
-      date,
-      time: "",
-      collectionSlot: null,
-    }));
+    setCollectionInfo((previous) => {
+      if (previous.date === date) return previous;
+      return {
+        ...previous,
+        option: "pickedUpDelivered",
+        optionLabel,
+        date,
+        time: "",
+        collectionSlot: null,
+      };
+    });
 
-    setError("");
+    setError((prev) => (prev ? "" : prev));
   }
 
   function updatePickupSlot(slotId) {
@@ -1576,18 +1580,21 @@ function StepSchedule({
       collectionSlot: slotId,
     }));
 
-    setError("");
+    setError((prev) => (prev ? "" : prev));
   }
 
   function updateDeliveryDate(date) {
-    setDeliveryInfo((previous) => ({
-      ...previous,
-      date,
-      time: "",
-      deliverySlot: null,
-    }));
+    setDeliveryInfo((previous) => {
+      if (previous.date === date) return previous;
+      return {
+        ...previous,
+        date,
+        time: "",
+        deliverySlot: null,
+      };
+    });
 
-    setError("");
+    setError((prev) => (prev ? "" : prev));
   }
 
   function updateDeliverySlot(slotId) {
@@ -1597,7 +1604,7 @@ function StepSchedule({
       deliverySlot: slotId,
     }));
 
-    setError("");
+    setError((prev) => (prev ? "" : prev));
   }
 
   function handleNext() {

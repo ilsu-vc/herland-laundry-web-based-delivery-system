@@ -216,6 +216,19 @@ router.post('/book', requireAuth, async (req, res) => {
         }
         // ────────────────────────────────────────────────────────────────────────
 
+        let assignedRiderId = null;
+        if (option === 'pickedUpDelivered' || option === 'dropOffDelivered') {
+            const { data: riders } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('role', 'Rider');
+
+            if (riders && riders.length > 0) {
+                const randomIndex = Math.floor(Math.random() * riders.length);
+                assignedRiderId = riders[randomIndex].id;
+            }
+        }
+
         const { data, error } = await supabase
             .from('bookings')
             .insert([
@@ -232,6 +245,7 @@ router.post('/book', requireAuth, async (req, res) => {
                     collection_details: collection_details || null,
                     payment_details: payment_details || null,
                     notes: notes || '',
+                    rider_id: assignedRiderId,
                 },
             ])
             .select()
@@ -249,6 +263,11 @@ router.post('/book', requireAuth, async (req, res) => {
 
         // Send Notification
         notificationService.notify(req.user.id, 'BOOKING_CREATED', data.reference_number || data.id);
+
+        // Notify auto-assigned rider
+        if (assignedRiderId) {
+            notificationService.notify(assignedRiderId, 'CUSTOM', data.reference_number || data.id, 'A new booking has been auto-assigned to you.');
+        }
     } catch (error) {
         console.error('Error creating booking:', error.message || error);
         res.status(500).json({ error: 'Failed to create booking. Please try again.' });
@@ -340,10 +359,21 @@ router.get('/my-bookings/:id', requireAuth, async (req, res) => {
             .maybeSingle();
 
         const hasBypass = profile?.role === 'Admin' || profile?.role === 'Staff';
-        const booking = await getBookingByIdOrRef(id, req.user.id, hasBypass);
+        let booking = null;
+
+        if (hasBypass || profile?.role === 'Rider') {
+            // For riders, we check if they are the assigned rider later
+            booking = await getBookingByIdOrRef(id, req.user.id, true);
+            
+            if (booking && profile?.role === 'Rider' && booking.rider_id !== req.user.id) {
+                return res.status(403).json({ error: 'Unauthorized to view this booking' });
+            }
+        } else {
+            booking = await getBookingByIdOrRef(id, req.user.id, false);
+        }
 
         if (!booking) {
-            console.log(`[DEBUG] Booking ${id} not found for user ${req.user.id}`);
+            console.log(`[DEBUG] Booking ${id} not found or unauthorized for user ${req.user.id}`);
             return res.status(404).json({ error: 'Booking not found' });
         }
 

@@ -56,7 +56,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'BookingAccepted', label: 'Booking Accepted' },
   { value: 'BookingEdited', label: 'Booking Edited' },
   { value: 'PaymentConfirmed', label: 'Payment Confirmed' },
-  { value: 'RiderDispatchedForPickup', label: 'Rider Dispatched for Pickup' },
+  { value: 'RiderDispatchedForPickup', label: 'Rider Dispatch for Pickup' },
   { value: 'PickedUpFromCustomer', label: 'Picked Up from Customer' },
   { value: 'InProgress', label: 'Laundry In Progress' },
   { value: 'ReadyForPickup', label: 'Ready for Pick-up' },
@@ -214,7 +214,7 @@ export default function BookingHistory() {
 
   const [bookings, setBookings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('active');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

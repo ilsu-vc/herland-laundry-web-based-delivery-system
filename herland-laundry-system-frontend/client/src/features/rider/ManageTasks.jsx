@@ -349,17 +349,17 @@ export default function ManageTasks() {
 	const filter = activeTab === 'available' ? availableFilter : assignedFilter
 	const setFilter = activeTab === 'available' ? setAvailableFilter : setAssignedFilter
 
-	const todaysAvailableBookings = useMemo(() => {
-		return availableBookings.filter(isTodayTask)
+	const displayAvailableBookings = useMemo(() => {
+		return availableBookings
 	}, [availableBookings])
 
-	const todaysAssignedBookings = useMemo(() => {
-		return bookings.filter(isTodayTask)
+	const displayAssignedBookings = useMemo(() => {
+		return bookings
 	}, [bookings])
 
 	const currentBaseBookings = activeTab === 'available'
-		? todaysAvailableBookings
-		: todaysAssignedBookings
+		? displayAvailableBookings
+		: displayAssignedBookings
 
 	const chipCounts = useMemo(() => {
 		return getChipCounts(currentBaseBookings)
@@ -373,6 +373,38 @@ export default function ManageTasks() {
 			return type === filter
 		})
 	}, [currentBaseBookings, filter])
+
+	const categorizedCurrentBookings = useMemo(() => {
+		const past = []
+		const todayTasks = []
+		const upcoming = []
+		const today = toDateOnly(new Date())
+
+		currentBookings.forEach(task => {
+			const type = STATUS_META[task.status]?.type || ''
+			let taskDate = ''
+			
+			if (type === 'Pickup') {
+				taskDate = toDateOnly(task.pickupDate)
+			} else if (type === 'Delivery') {
+				taskDate = toDateOnly(task.deliveryDate)
+			} else {
+				taskDate = toDateOnly(task.pickupDate) || toDateOnly(task.deliveryDate)
+			}
+
+			if (!taskDate) {
+				todayTasks.push(task)
+			} else if (taskDate < today) {
+				past.push(task)
+			} else if (taskDate === today) {
+				todayTasks.push(task)
+			} else {
+				upcoming.push(task)
+			}
+		})
+
+		return { past, todayTasks, upcoming }
+	}, [currentBookings])
 
 	const selectedBooking = useMemo(
 		() => currentBookings.find((booking) => booking.id === expandedId) || null,
@@ -466,6 +498,48 @@ export default function ManageTasks() {
 		}
 	}
 
+	const handleUpdateStatus = async (booking, newStatus) => {
+		const confirmed = window.confirm(`Are you sure you want to mark this task as "${newStatus}"?`)
+		if (!confirmed) return
+
+		try {
+			setActionLoadingId(booking.dbId)
+			setError('')
+
+			const { data: { session } } = await supabase.auth.getSession()
+			const token = session?.access_token
+
+			if (!token) throw new Error('You must be logged in as a rider.')
+
+			const newTimeline = [
+				...(Array.isArray(booking.raw.timeline) ? booking.raw.timeline : []),
+				{ status: newStatus, timestamp: new Date().toISOString() }
+			]
+
+			const res = await fetch(`${API_BASE}/update-status/${booking.dbId}`, {
+				method: 'PATCH',
+				headers: {
+					Authorization: `Bearer ${token}`,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ new_status: newStatus, timeline: newTimeline })
+			})
+
+			if (!res.ok) {
+				const message = await res.text()
+				throw new Error(message || 'Failed to update task status.')
+			}
+
+			setExpandedId(null)
+			await fetchAll()
+		} catch (err) {
+			console.error(err)
+			setError(err.message || 'Something went wrong while updating task status.')
+		} finally {
+			setActionLoadingId(null)
+		}
+	}
+
 	const hasCoordinates =
 		selectedBooking?.lat !== null &&
 		selectedBooking?.lat !== undefined &&
@@ -523,8 +597,8 @@ export default function ManageTasks() {
 					display: 'flex',
 				}}>
 					{[
-						{ key: 'available', label: 'Available Tasks', count: todaysAvailableBookings.length },
-						{ key: 'assigned', label: 'Assigned Tasks', count: todaysAssignedBookings.length },
+						{ key: 'available', label: 'Available Tasks', count: displayAvailableBookings.length },
+						{ key: 'assigned', label: 'Assigned Tasks', count: displayAssignedBookings.length },
 					].map(({ key, label, count }) => {
 						const isActive = activeTab === key
 
@@ -635,7 +709,7 @@ export default function ManageTasks() {
 							fontSize: '0.9375rem',
 							color: C.blueMuted,
 						}}>
-							No tasks found for today.
+							No active tasks found.
 						</p>
 					</div>
 				)}
@@ -643,169 +717,193 @@ export default function ManageTasks() {
 				<div style={{
 					display: 'flex',
 					flexDirection: 'column',
-					gap: 12,
+					gap: 24,
 				}}>
-					{currentBookings.map((booking) => {
-						const m = meta(booking)
-						const isAvailable = activeTab === 'available'
-						const isActionLoading = actionLoadingId === booking.dbId
+					{(() => {
+						const renderSection = (title, tasks, titleColor) => {
+							if (tasks.length === 0) return null
+
+							return (
+								<div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+									<div style={{ paddingBottom: 4, borderBottom: `1px solid ${C.skyBd}` }}>
+										<h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: titleColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+											{title} ({tasks.length})
+										</h3>
+									</div>
+
+									{tasks.map((booking) => {
+										const m = meta(booking)
+										const isAvailable = activeTab === 'available'
+										const isActionLoading = actionLoadingId === booking.dbId
+
+										return (
+											<div
+												key={booking.id}
+												style={{
+													background: C.white,
+													borderRadius: '1rem',
+													border: `1px solid ${C.skyBd}`,
+													boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+													overflow: 'hidden',
+													display: 'flex',
+												}}
+											>
+												<div style={{
+													width: 4,
+													flexShrink: 0,
+													background: m.color,
+												}} />
+
+												<div style={{
+													flex: 1,
+													padding: '1.125rem 1.25rem',
+												}}>
+													<div style={{
+														display: 'flex',
+														alignItems: 'center',
+														justifyContent: 'space-between',
+														gap: 8,
+														marginBottom: 12,
+													}}>
+														<div style={{
+															display: 'flex',
+															alignItems: 'center',
+															gap: 6,
+															flexWrap: 'wrap',
+														}}>
+															<p style={{
+																fontSize: '0.9375rem',
+																fontWeight: 700,
+																color: '#1f2937',
+															}}>
+																{booking.customerName}
+															</p>
+
+															<span style={{
+																fontSize: '0.75rem',
+																color: C.blueMuted,
+															}}>
+																#{booking.id}
+															</span>
+														</div>
+
+														<span style={{
+															fontSize: '0.6875rem',
+															fontWeight: 700,
+															background: m.bg,
+															color: m.color,
+															borderRadius: '2rem',
+															padding: '2px 10px',
+															textTransform: 'uppercase',
+															letterSpacing: '0.06em',
+															flexShrink: 0,
+														}}>
+															{m.label}
+														</span>
+													</div>
+
+													<div style={{
+														display: 'grid',
+														gridTemplateColumns: '1fr 1fr',
+														gap: 16,
+														marginBottom: 14,
+													}}>
+														<InfoBlock
+															label="Pickup From"
+															address={booking.pickupAddress}
+															date={booking.pickupDate}
+															time={booking.pickupTime}
+														/>
+
+														<InfoBlock
+															label="Deliver To"
+															address={booking.deliveryAddress}
+															date={booking.deliveryDate}
+															time={booking.deliveryTime}
+														/>
+													</div>
+
+													{isAvailable ? (
+														<div style={{
+															display: 'grid',
+															gridTemplateColumns: '1fr 1fr',
+															gap: 8,
+														}}>
+															<button
+																onClick={() => handleAccept(booking)}
+																disabled={isActionLoading}
+																style={{
+																	width: '100%',
+																	padding: '9px 0',
+																	background: C.green,
+																	border: `1.5px solid ${C.green}`,
+																	borderRadius: '0.625rem',
+																	fontSize: '0.8125rem',
+																	fontWeight: 700,
+																	color: '#fff',
+																	cursor: isActionLoading ? 'not-allowed' : 'pointer',
+																	fontFamily: 'inherit',
+																	opacity: isActionLoading ? 0.7 : 1,
+																}}
+															>
+																{isActionLoading ? 'Accepting…' : 'Accept Task'}
+															</button>
+
+															<button
+																onClick={() => handleDecline(booking)}
+																disabled={isActionLoading}
+																style={{
+																	width: '100%',
+																	padding: '9px 0',
+																	background: C.white,
+																	border: `1.5px solid ${C.red}`,
+																	borderRadius: '0.625rem',
+																	fontSize: '0.8125rem',
+																	fontWeight: 700,
+																	color: C.red,
+																	cursor: isActionLoading ? 'not-allowed' : 'pointer',
+																	fontFamily: 'inherit',
+																	opacity: isActionLoading ? 0.7 : 1,
+																}}
+															>
+																{isActionLoading ? 'Declining…' : 'Decline'}
+															</button>
+														</div>
+													) : (
+														<button
+															onClick={() => setExpandedId(booking.id)}
+															style={{
+																width: '100%',
+																padding: '9px 0',
+																background: 'none',
+																border: `1.5px solid ${C.blue}`,
+																borderRadius: '0.625rem',
+																fontSize: '0.8125rem',
+																fontWeight: 700,
+																color: C.blue,
+																cursor: 'pointer',
+																fontFamily: 'inherit',
+															}}
+														>
+															View Details &amp; Map
+														</button>
+													)}
+												</div>
+											</div>
+										)
+									})}
+								</div>
+							)
+						}
 
 						return (
-							<div
-								key={booking.id}
-								style={{
-									background: C.white,
-									borderRadius: '1rem',
-									border: `1px solid ${C.skyBd}`,
-									boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
-									overflow: 'hidden',
-									display: 'flex',
-								}}
-							>
-								<div style={{
-									width: 4,
-									flexShrink: 0,
-									background: m.color,
-								}} />
-
-								<div style={{
-									flex: 1,
-									padding: '1.125rem 1.25rem',
-								}}>
-									<div style={{
-										display: 'flex',
-										alignItems: 'center',
-										justifyContent: 'space-between',
-										gap: 8,
-										marginBottom: 12,
-									}}>
-										<div style={{
-											display: 'flex',
-											alignItems: 'center',
-											gap: 6,
-											flexWrap: 'wrap',
-										}}>
-											<p style={{
-												fontSize: '0.9375rem',
-												fontWeight: 700,
-												color: '#1f2937',
-											}}>
-												{booking.customerName}
-											</p>
-
-											<span style={{
-												fontSize: '0.75rem',
-												color: C.blueMuted,
-											}}>
-												#{booking.id}
-											</span>
-										</div>
-
-										<span style={{
-											fontSize: '0.6875rem',
-											fontWeight: 700,
-											background: m.bg,
-											color: m.color,
-											borderRadius: '2rem',
-											padding: '2px 10px',
-											textTransform: 'uppercase',
-											letterSpacing: '0.06em',
-											flexShrink: 0,
-										}}>
-											{m.label}
-										</span>
-									</div>
-
-									<div style={{
-										display: 'grid',
-										gridTemplateColumns: '1fr 1fr',
-										gap: 16,
-										marginBottom: 14,
-									}}>
-										<InfoBlock
-											label="Pickup From"
-											address={booking.pickupAddress}
-											date={booking.pickupDate}
-											time={booking.pickupTime}
-										/>
-
-										<InfoBlock
-											label="Deliver To"
-											address={booking.deliveryAddress}
-											date={booking.deliveryDate}
-											time={booking.deliveryTime}
-										/>
-									</div>
-
-									{isAvailable ? (
-										<div style={{
-											display: 'grid',
-											gridTemplateColumns: '1fr 1fr',
-											gap: 8,
-										}}>
-											<button
-												onClick={() => handleAccept(booking)}
-												disabled={isActionLoading}
-												style={{
-													width: '100%',
-													padding: '9px 0',
-													background: C.green,
-													border: `1.5px solid ${C.green}`,
-													borderRadius: '0.625rem',
-													fontSize: '0.8125rem',
-													fontWeight: 700,
-													color: '#fff',
-													cursor: isActionLoading ? 'not-allowed' : 'pointer',
-													fontFamily: 'inherit',
-													opacity: isActionLoading ? 0.7 : 1,
-												}}
-											>
-												{isActionLoading ? 'Accepting…' : 'Accept Task'}
-											</button>
-
-											<button
-												onClick={() => handleDecline(booking)}
-												disabled={isActionLoading}
-												style={{
-													width: '100%',
-													padding: '9px 0',
-													background: C.white,
-													border: `1.5px solid ${C.red}`,
-													borderRadius: '0.625rem',
-													fontSize: '0.8125rem',
-													fontWeight: 700,
-													color: C.red,
-													cursor: isActionLoading ? 'not-allowed' : 'pointer',
-													fontFamily: 'inherit',
-													opacity: isActionLoading ? 0.7 : 1,
-												}}
-											>
-												{isActionLoading ? 'Declining…' : 'Decline'}
-											</button>
-										</div>
-									) : (
-										<button
-											onClick={() => setExpandedId(booking.id)}
-											style={{
-												width: '100%',
-												padding: '9px 0',
-												background: 'none',
-												border: `1.5px solid ${C.blue}`,
-												borderRadius: '0.625rem',
-												fontSize: '0.8125rem',
-												fontWeight: 700,
-												color: C.blue,
-												cursor: 'pointer',
-												fontFamily: 'inherit',
-											}}
-										>
-											View Details &amp; Map
-										</button>
-									)}
-								</div>
-							</div>
+							<>
+								{renderSection('Past (Overdue)', categorizedCurrentBookings.past, C.red)}
+								{renderSection('Tasks for Today', categorizedCurrentBookings.todayTasks, C.green)}
+								{renderSection('Upcoming', categorizedCurrentBookings.upcoming, C.blue)}
+							</>
 						)
-					})}
+					})()}
 				</div>
 			</div>
 
@@ -1010,6 +1108,75 @@ export default function ManageTasks() {
 								View Receipt
 							</button>
 						</div>
+
+						{/* Action block for active assigned tasks */}
+						{(selectedBooking.status === 'Rider Dispatched for Pickup' || selectedBooking.status === 'Out for Delivery') && (
+							<div style={{
+								background: C.white,
+								borderRadius: '1rem',
+								border: `1px solid ${C.skyBd}`,
+								boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
+								padding: '1.25rem',
+								marginBottom: 12,
+							}}>
+								<p style={{
+									fontSize: '0.65rem',
+									fontWeight: 800,
+									letterSpacing: '0.09em',
+									textTransform: 'uppercase',
+									color: C.blueMuted,
+									marginBottom: 14,
+								}}>
+									Update Status
+								</p>
+
+								{selectedBooking.status === 'Rider Dispatched for Pickup' && (
+									<button
+										onClick={() => handleUpdateStatus(selectedBooking, 'Picked Up from Customer')}
+										disabled={actionLoadingId === selectedBooking.dbId}
+										style={{
+											width: '100%',
+											padding: '12px 0',
+											background: C.blue,
+											color: '#fff',
+											borderRadius: '0.75rem',
+											border: 'none',
+											fontSize: '0.9rem',
+											fontWeight: 700,
+											cursor: actionLoadingId === selectedBooking.dbId ? 'not-allowed' : 'pointer',
+											fontFamily: 'inherit',
+											opacity: actionLoadingId === selectedBooking.dbId ? 0.7 : 1,
+											boxShadow: '0 4px 14px rgba(56,120,194,0.24)',
+										}}
+									>
+										{actionLoadingId === selectedBooking.dbId ? 'Updating...' : 'Confirm Pick Up'}
+									</button>
+								)}
+
+								{selectedBooking.status === 'Out for Delivery' && (
+									<button
+										onClick={() => handleUpdateStatus(selectedBooking, 'Laundry Delivered')}
+										disabled={actionLoadingId === selectedBooking.dbId}
+										style={{
+											width: '100%',
+											padding: '12px 0',
+											background: C.green,
+											color: '#fff',
+											borderRadius: '0.75rem',
+											border: 'none',
+											fontSize: '0.9rem',
+											fontWeight: 700,
+											cursor: actionLoadingId === selectedBooking.dbId ? 'not-allowed' : 'pointer',
+											fontFamily: 'inherit',
+											opacity: actionLoadingId === selectedBooking.dbId ? 0.7 : 1,
+											boxShadow: '0 4px 14px rgba(75,173,64,0.28)',
+										}}
+									>
+										{actionLoadingId === selectedBooking.dbId ? 'Updating...' : 'Confirm Delivery'}
+									</button>
+								)}
+							</div>
+						)}
 
 						{/* Navigation */}
 						<div style={{

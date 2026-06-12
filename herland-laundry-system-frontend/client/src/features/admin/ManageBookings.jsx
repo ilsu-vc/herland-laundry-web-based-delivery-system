@@ -48,7 +48,7 @@ export const STATUS_META = {
   BookingAccepted:           { label: 'Booking Accepted',            color: '#ffde59' },
   BookingEdited:             { label: 'Booking Edited',              color: '#ffde59' },
   PaymentConfirmed:          { label: 'Payment Confirmed',           color: '#ffde59' },
-  RiderDispatchedForPickup:  { label: 'Rider Dispatched for Pickup', color: '#ffde59' },
+  RiderDispatchedForPickup:  { label: 'Rider Dispatch for Pickup', color: '#ffde59' },
   PickedUpFromCustomer:      { label: 'Picked Up from Customer',     color: '#ffde59' },
   InProgress:                { label: 'Laundry In Progress',         color: '#ffde59' },
   OutForDelivery:            { label: 'Out for Delivery',            color: '#ffde59' },
@@ -87,34 +87,39 @@ const ACTION_EFFECTS = {
     nextStage: 'dynamic',
   },
   PaymentConfirmed: {
-    actionLabel: 'Start Laundry',
-    status: 'Laundry In Progress',
+    actionLabel: 'Dispatch Rider for Pickup',
+    status: 'Rider Dispatched for Pickup',
     nextStage: 'shipping',
   },
   RiderDispatchedForPickup: {
-    actionLabel: 'Start Laundry',
-    status: 'Laundry In Progress',
+    actionLabel: 'Confirm Pick Up',
+    status: 'Picked Up from Customer',
     nextStage: 'shipping',
   },
   PickedUpFromCustomer: {
     actionLabel: 'Start Laundry',
     status: 'Laundry In Progress',
-    nextStage: 'shipping',
+    nextStage: 'preparation',
   },
   InProgress: {
     actionLabel: 'Dispatch Rider for Delivery',
     status: 'Out for Delivery',
-    nextStage: 'final',
+    nextStage: 'shipping',
   },
   OutForDelivery: {
-    actionLabel: 'Complete Booking',
-    status: 'Booking Completed',
-    nextStage: 'done',
+    actionLabel: 'Confirm Delivery',
+    status: 'Laundry Delivered',
+    nextStage: 'shipping',
   },
   ReadyForPickup: {
     actionLabel: 'Complete Booking',
     status: 'Booking Completed',
-    nextStage: 'done',
+    nextStage: 'final',
+  },
+  LaundryDelivered: {
+    actionLabel: 'Complete Booking',
+    status: 'Booking Completed',
+    nextStage: 'final',
   },
 };
 
@@ -409,9 +414,21 @@ export default function ManageBookings() {
 
   const handleUpdateStatus = async (booking) => {
     const statusKey = getBookingStatusKey(booking);
-    const action = ACTION_EFFECTS[statusKey];
+    let action = { ...ACTION_EFFECTS[statusKey] };
 
-    if (!action) {
+    // Dynamic bypass for Drop-off vs Pickup workflows
+    const isPickupRequired = booking.collectionOption === 'pickedUpDelivered';
+    const isDeliveryRequired = booking.collectionOption === 'dropOffDelivered' || booking.collectionOption === 'pickedUpDelivered';
+
+    if (statusKey === 'PaymentConfirmed' && !isPickupRequired) {
+      action = { actionLabel: 'Start Laundry', status: 'Laundry In Progress', nextStage: 'preparation' };
+    }
+
+    if (statusKey === 'InProgress' && !isDeliveryRequired) {
+      action = { actionLabel: 'Mark Ready for Pick-up', status: 'Ready for Pick-up', nextStage: 'final' };
+    }
+
+    if (!action || !action.status) {
       alert('No available next status for this booking.');
       return;
     }
@@ -431,7 +448,7 @@ export default function ManageBookings() {
     const nextStage =
       action.nextStage === 'dynamic'
         ? booking.collectionOption === 'pickedUpDelivered'
-          ? 'pickup'
+          ? 'shipping'
           : 'preparation'
         : action.nextStage;
 

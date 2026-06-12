@@ -16,7 +16,7 @@ const STATUS_META = {
   BookingAccepted: { label: 'Booking Accepted', color: '#ffde59' },
   BookingEdited: { label: 'Booking Edited', color: '#ffde59' },
   PaymentConfirmed: { label: 'Payment Confirmed', color: '#ffde59' },
-  RiderDispatchedForPickup: { label: 'Rider Dispatched for Pickup', color: '#ffde59' },
+  RiderDispatchedForPickup: { label: 'Rider Dispatch for Pickup', color: '#ffde59' },
   PickedUpFromCustomer: { label: 'Picked Up from Customer', color: '#ffde59' },
   InProgress: { label: 'Laundry In Progress', color: '#ffde59' },
   OutForDelivery: { label: 'Out for Delivery', color: '#ffde59' },
@@ -481,7 +481,7 @@ export default function Dashboard() {
                   return (
                     <div key={booking.id}>
                       <button
-                        onClick={() => navigate(`/dashboard/bookings/${booking.id}`)}
+                        onClick={() => navigate(`/bookings/${booking.id}`)}
                         className="w-full text-left py-4 transition-all duration-150 hover:bg-gray-50/50"
                       >
                         <div className="flex items-center justify-between mb-2">

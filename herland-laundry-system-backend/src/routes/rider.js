@@ -176,10 +176,10 @@ router.patch('/decline/:id', verifyRole('Rider'), async (req, res) => {
  */
 router.patch('/update-status/:id', verifyRole('Rider'), async (req, res) => {
     const { id } = req.params;
-    const { new_status } = req.body;
+    const { new_status, timeline } = req.body;
 
     // Riders typically handle these statuses
-    const validRiderStatuses = ['picked_up', 'ready_for_delivery', 'delivered'];
+    const validRiderStatuses = ['Picked Up from Customer', 'Laundry Delivered'];
 
     if (!validRiderStatuses.includes(new_status)) {
         return res.status(400).json({ error: 'Invalid status update for Rider' });
@@ -188,7 +188,7 @@ router.patch('/update-status/:id', verifyRole('Rider'), async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('bookings')
-            .update({ status: new_status })
+            .update({ status: new_status, timeline: timeline })
             .eq('id', id)
             .select();
 
