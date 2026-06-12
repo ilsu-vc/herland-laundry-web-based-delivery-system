@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { useLocation, useNavigate } from 'react-router-dom'
-import BottomNavbar from './shared/navigation/BottomNavbar'
+
 import Sidebar from './shared/navigation/Sidebar'
 import TopNavbar from './shared/navigation/TopNavbar'
 import { useLayout } from './app/LayoutContext'
@@ -145,7 +145,7 @@ function AppShell() {
 
         {!shouldHideBottomNav && (
           <div className="lg:hidden">
-            <BottomNavbar />
+
           </div>
         )}
       </div>

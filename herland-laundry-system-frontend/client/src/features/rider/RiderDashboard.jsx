@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import BottomNavbar from '../../shared/navigation/BottomNavbar';
+
 import { formatDate, formatTime } from '../../shared/utils/formatters';
 import { supabase } from '../../lib/supabase';
 
@@ -269,14 +269,6 @@ export default function RiderDashboard() {
 
   const [dashboardFilter, setDashboardFilter] = useState('Today');
 
-  const activeAssignedTasks = useMemo(() => {
-    return assignedBookings.filter(isActiveAssignedTask);
-  }, [assignedBookings]);
-
-  const completedTasks = useMemo(() => {
-    return assignedBookings.filter(isCompletedTask);
-  }, [assignedBookings]);
-
   const categorizedTasks = useMemo(() => {
     const past = [];
     const todayTasks = [];
@@ -306,9 +298,18 @@ export default function RiderDashboard() {
       }
     });
 
-    // Sort them if needed, but for now just returning them
     return { past, todayTasks, upcoming };
   }, [assignedBookings]);
+
+  const activeAssignedTasks = useMemo(() => {
+    return categorizedTasks.todayTasks.filter(isActiveAssignedTask);
+  }, [categorizedTasks.todayTasks]);
+
+  const completedTasks = useMemo(() => {
+    return categorizedTasks.todayTasks.filter(isCompletedTask);
+  }, [categorizedTasks.todayTasks]);
+
+
 
   return (
     <div className="relative flex min-h-screen flex-col" style={{ background: Colors.skyFaint }}>
@@ -627,7 +628,7 @@ export default function RiderDashboard() {
         </div>
       </main>
 
-      <BottomNavbar />
+
     </div>
   );
 }

@@ -32,10 +32,10 @@ const STATUS_LABEL_TO_KEY = Object.entries(STATUS_META).reduce((acc, [key, meta]
 }, {});
 
 const ACTION_EFFECTS = {
-  BookingReceived: { actionLabel: 'Accept Booking', status: 'Booking Accepted', nextStage: 'payment' },
-  BookingAccepted: { actionLabel: 'Confirm Payment', status: 'Payment Confirmed', nextStage: 'dynamic' },
+  BookingReceived: { actionLabel: 'Confirm Payment', status: 'Payment Confirmed', nextStage: 'payment' },
+  PaymentConfirmed: { actionLabel: 'Accept Booking', status: 'Booking Accepted', nextStage: 'dynamic' },
   BookingEdited: { actionLabel: 'Confirm Payment', status: 'Payment Confirmed', nextStage: 'dynamic' },
-  PaymentConfirmed: { actionLabel: 'Dispatch Rider for Pickup', status: 'Rider Dispatched for Pickup', nextStage: 'shipping' },
+  BookingAccepted: { actionLabel: 'Dispatch Rider for Pickup', status: 'Rider Dispatched for Pickup', nextStage: 'shipping' },
   RiderDispatchedForPickup: { actionLabel: 'Confirm Pick Up', status: 'Picked Up from Customer', nextStage: 'shipping' },
   PickedUpFromCustomer: { actionLabel: 'Start Laundry', status: 'Laundry In Progress', nextStage: 'preparation' },
   InProgress: { actionLabel: 'Dispatch Rider for Delivery', status: 'Out for Delivery', nextStage: 'shipping' },
@@ -204,7 +204,7 @@ export default function BookingDetails() {
     const isPickupRequired = booking.collectionOption === 'pickedUpDelivered';
     const isDeliveryRequired = booking.collectionOption === 'dropOffDelivered' || booking.collectionOption === 'pickedUpDelivered';
 
-    if (statusKey === 'PaymentConfirmed' && !isPickupRequired) {
+    if (statusKey === 'BookingAccepted' && !isPickupRequired) {
       action = { actionLabel: 'Start Laundry', status: 'Laundry In Progress', nextStage: 'preparation' };
     }
 
@@ -304,8 +304,8 @@ export default function BookingDetails() {
 
     const futureSteps = [
       "Booking Received",
-      "Booking Accepted",
       "Payment Confirmed",
+      "Booking Accepted",
     ];
 
     if (isPickupRequired) {
@@ -409,7 +409,7 @@ export default function BookingDetails() {
                 Next: {ACTION_EFFECTS[getBookingStatusKey(booking)].actionLabel}
               </button>
             )}
-            {booking?.status?.toLowerCase() !== "cancelled" && (
+            {isAdminOrStaff && booking?.status?.toLowerCase() !== "cancelled" && (
               <button
                 onClick={() => navigate(`/bookings/${bookingId}/receipt`)}
                 className="rounded-lg border border-[#4bad40] px-3 py-1.5 text-sm font-medium text-[#4bad40] hover:bg-[#4bad40]/5 transition"
@@ -649,18 +649,12 @@ export default function BookingDetails() {
                 )}
                 <div className="sm:col-span-2 space-y-3 mt-2 border-t border-[#f0f0f0] pt-4">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-[#b4b4b4] font-semibold uppercase text-xs">Total Amount</span>
-                    <span className="font-bold text-[#374151]">₱{booking?.paymentDetails?.totalAmount?.toFixed(2) || "0.00"}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-t border-dashed border-[#d9e8fb] pt-2">
-                    <span className="text-[#3878c2] font-bold uppercase text-xs">Remaining Balance</span>
-                    <span className="text-2xl font-black text-[#3878c2]">
-                      ₱{(booking?.paymentDetails?.balance || 0).toFixed(2)}
-                    </span>
+                    <span className="text-[#3878c2] font-bold uppercase text-xs">Total Amount</span>
+                    <span className="text-2xl font-black text-[#3878c2]">₱{booking?.paymentDetails?.totalAmount?.toFixed(2) || "0.00"}</span>
                   </div>
                   {booking?.paymentDetails?.method === "GCash" && (
                     <p className="mt-1 text-xs text-[#b4b4b4]">
-                      Balance to be settled upon collection.
+                      Payment to be settled upon collection.
                     </p>
                   )}
                 </div>

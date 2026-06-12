@@ -45,6 +45,32 @@ router.get('/services', async (req, res) => {
                 estimatedHours: i.estimated_hours != null ? Number(i.estimated_hours) : 0,
             }));
 
+        let loadOptions = (items || [])
+            .filter(i => i.type === 'load')
+            .map(i => {
+                try {
+                    const parsed = JSON.parse(i.name);
+                    return {
+                        id: i.id,
+                        label: parsed.label || '',
+                        sublabel: parsed.sublabel || '',
+                        description: parsed.description || '',
+                        price: Number(i.current_price),
+                    };
+                } catch (e) {
+                    return null;
+                }
+            })
+            .filter(Boolean);
+
+        if (loadOptions.length === 0) {
+            loadOptions = [
+                { id: 'regular', label: 'Regular Light Mix', sublabel: 'Up to 7.5 kg', description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.', price: 220 },
+                { id: 'heavy', label: 'Heavy Load', sublabel: 'Up to 5 kg', description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.', price: 220 },
+                { id: 'perPiece', label: 'Per Piece', sublabel: '₱220 per item', description: 'Comforter, Duvet, Pillow, etc.', price: 220 },
+            ];
+        }
+
         let { data: faqs, error: faqsError } = await supabase
             .from('faqs')
             .select('*')
@@ -70,7 +96,7 @@ router.get('/services', async (req, res) => {
             answer: f.answer
         }));
 
-        res.json({ services, addOns, schedule: scheduleRows?.[0] || null, faqs: formattedFaqs });
+        res.json({ services, addOns, loadOptions, schedule: scheduleRows?.[0] || null, faqs: formattedFaqs });
     } catch (error) {
         console.error('Fetch Services Error:', error.message);
         res.status(500).json({ error: 'Failed to fetch services' });

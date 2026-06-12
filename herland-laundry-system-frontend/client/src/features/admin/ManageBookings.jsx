@@ -72,13 +72,13 @@ const STATUS_FILTER_OPTIONS = [
 
 const ACTION_EFFECTS = {
   BookingReceived: {
-    actionLabel: 'Accept Booking',
-    status: 'Booking Accepted',
-    nextStage: 'payment',
-  },
-  BookingAccepted: {
     actionLabel: 'Confirm Payment',
     status: 'Payment Confirmed',
+    nextStage: 'payment',
+  },
+  PaymentConfirmed: {
+    actionLabel: 'Accept Booking',
+    status: 'Booking Accepted',
     nextStage: 'dynamic',
   },
   BookingEdited: {
@@ -86,7 +86,7 @@ const ACTION_EFFECTS = {
     status: 'Payment Confirmed',
     nextStage: 'dynamic',
   },
-  PaymentConfirmed: {
+  BookingAccepted: {
     actionLabel: 'Dispatch Rider for Pickup',
     status: 'Rider Dispatched for Pickup',
     nextStage: 'shipping',
@@ -274,6 +274,38 @@ export default function ManageBookings() {
   const selectedStatusLabel =
     STATUS_FILTER_OPTIONS.find((option) => option.value === statusFilter)?.label || 'Booking Received';
 
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    bookings.forEach((b) => {
+      const date = b.date || b.createdAt;
+      if (date) {
+        years.add(String(date).substring(0, 4));
+      }
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [bookings]);
+
+  const availableMonths = useMemo(() => {
+    const months = new Set();
+    bookings.forEach((b) => {
+      const date = String(b.date || b.createdAt);
+      if (date) {
+        const y = date.substring(0, 4);
+        if (!yearInput || y === yearInput) {
+          const m = date.substring(5, 7);
+          if (m && !isNaN(m)) months.add(m);
+        }
+      }
+    });
+    const monthNames = [
+      '', 'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return Array.from(months)
+      .sort()
+      .map((val) => [val, monthNames[parseInt(val, 10)]]);
+  }, [bookings, yearInput]);
+
   const applyDateFilter = () => {
     setAppliedYear(yearInput);
     setAppliedMonth(monthInput);
@@ -420,7 +452,7 @@ export default function ManageBookings() {
     const isPickupRequired = booking.collectionOption === 'pickedUpDelivered';
     const isDeliveryRequired = booking.collectionOption === 'dropOffDelivered' || booking.collectionOption === 'pickedUpDelivered';
 
-    if (statusKey === 'PaymentConfirmed' && !isPickupRequired) {
+    if (statusKey === 'BookingAccepted' && !isPickupRequired) {
       action = { actionLabel: 'Start Laundry', status: 'Laundry In Progress', nextStage: 'preparation' };
     }
 
@@ -715,7 +747,7 @@ export default function ManageBookings() {
                   }}
                 >
                   <option value="">All</option>
-                  {['2024', '2025', '2026', '2027', '2028'].map((y) => (
+                  {availableYears.map((y) => (
                     <option key={y} value={y}>
                       {y}
                     </option>
@@ -750,20 +782,7 @@ export default function ManageBookings() {
                   }}
                 >
                   <option value="">All</option>
-                  {[
-                    ['01', 'January'],
-                    ['02', 'February'],
-                    ['03', 'March'],
-                    ['04', 'April'],
-                    ['05', 'May'],
-                    ['06', 'June'],
-                    ['07', 'July'],
-                    ['08', 'August'],
-                    ['09', 'September'],
-                    ['10', 'October'],
-                    ['11', 'November'],
-                    ['12', 'December'],
-                  ].map(([val, name]) => (
+                  {availableMonths.map(([val, name]) => (
                     <option key={val} value={val}>
                       {name}
                     </option>
@@ -914,7 +933,7 @@ export default function ManageBookings() {
                 }}
               >
                 <option value="">All</option>
-                {['2024', '2025', '2026', '2027', '2028'].map((y) => (
+                {availableYears.map((y) => (
                   <option key={y} value={y}>
                     {y}
                   </option>
@@ -949,20 +968,7 @@ export default function ManageBookings() {
                 }}
               >
                 <option value="">All</option>
-                {[
-                  ['01', 'January'],
-                  ['02', 'February'],
-                  ['03', 'March'],
-                  ['04', 'April'],
-                  ['05', 'May'],
-                  ['06', 'June'],
-                  ['07', 'July'],
-                  ['08', 'August'],
-                  ['09', 'September'],
-                  ['10', 'October'],
-                  ['11', 'November'],
-                  ['12', 'December'],
-                ].map(([val, name]) => (
+                {availableMonths.map(([val, name]) => (
                   <option key={val} value={val}>
                     {name}
                   </option>

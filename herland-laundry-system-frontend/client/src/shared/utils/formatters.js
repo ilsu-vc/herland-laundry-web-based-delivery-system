@@ -5,13 +5,16 @@ export const formatDate = (date) => {
   if (!date) return "-";
   const today = new Date();
   const d = new Date(date);
-  const day = d.getDate().toString().padStart(2, "0");
-  const month = d.toLocaleString("default", { month: "long" });
+  if (Number.isNaN(d.getTime())) return "-";
+
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const year = d.getFullYear();
+  const formattedDate = `${month}/${day}/${year}`;
   
-  // Checking if it's today for a friendlier display
   return today.toDateString() === d.toDateString()
-    ? `Today | ${month} ${day}, ${d.getFullYear()}`
-    : `${month} ${day}, ${d.getFullYear()}`;
+    ? `Today | ${formattedDate}`
+    : formattedDate;
 };
 
 export const parseDateString = (value) => {

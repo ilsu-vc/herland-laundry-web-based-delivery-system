@@ -24,7 +24,7 @@ const ManageServices = lazy(() => import('../features/admin/ManageServices'))
 const ManageUsers = lazy(() => import('../features/admin/ManageUsers'))
 const Reports = lazy(() => import('../features/admin/Reports'))
 const FeedbackReports = lazy(() => import('../features/admin/FeedbackReports'))
-const TempRoleSwitcher = lazy(() => import('../shared/permissions/TempRoleSwitcher'))
+
 const ForgotPassword = lazy(() => import('../features/auth/ForgotPassword'))
 const ResetPassword = lazy(() => import('../features/auth/ResetPassword'))
 const ManageAdmins = lazy(() => import('../features/admin/ManageAdmins'))
@@ -92,7 +92,7 @@ export default function AppRoutes() {
 				<Route path="/admin/manage-users" element={<ManageUsers />} />
 				<Route path="/admin/reports" element={<Reports />} />
 				<Route path="/admin/feedback-reports" element={<FeedbackReports />} />
-				<Route path="/role-switcher" element={<TempRoleSwitcher />} />
+
 				<Route path="/login" element={<Login />} />
 				<Route path="/signup" element={<Signup />} />
 				<Route path="/user/book-now" element={<BookNow />} />

@@ -5,7 +5,7 @@ import { usePermissions } from "../../shared/permissions/UsePermissions";
 import DateTimePicker from "../../shared/components/DateTimePicker";
 import { supabase } from "../../lib/supabase";
 import { formatDate, formatTime, getRouteAddresses } from "../../shared/utils/formatters";
-import BookingCalendar from "../../shared/components/BookingCalendar";
+
 import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from "@react-google-maps/api";
 import { useToast } from "../../shared/components/Toast";
 
@@ -74,6 +74,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
     return saved ? parseFloat(saved) : 0;
   });
   const [availableServices, setAvailableServices] = useState([]);
+  const [availableLoads, setAvailableLoads] = useState([]);
   const [loadingServices, setLoadingServices] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState(() => {
     if (isEditMode) return "gcash";
@@ -142,6 +143,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
         if (response.ok) {
           const data = await response.json();
           setAvailableServices(data.services || []);
+          setAvailableLoads(data.loadOptions || []);
           
           // Initialize state if not in edit mode
           if (!isEditMode) {
@@ -421,6 +423,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
             setNumberOfBags={setNumberOfBags}
             bagDescription={bagDescription}
             setBagDescription={setBagDescription}
+            availableLoads={availableLoads}
             isEditMode={isEditMode}
           />
         )}
@@ -644,9 +647,10 @@ function StepSelectServices({
   setNumberOfBags,
   bagDescription,
   setBagDescription,
+  availableLoads,
   isEditMode = false,
 }) {
-  const loadOptions = [
+  const loadOptions = availableLoads.length > 0 ? availableLoads : [
     {
       id: 'regular',
       label: 'Regular Light Mix',
@@ -1967,6 +1971,7 @@ function StepReview({
   saveHomeAddress,
   clearBookingState,
   onEditSuccess,
+  availableLoads = [],
 }) {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -1977,7 +1982,7 @@ function StepReview({
   const [paymentReference, setPaymentReference] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loadOptions = [
+  const loadOptions = availableLoads.length > 0 ? availableLoads : [
     { id: 'regular', label: 'Regular Light Mix', price: 220 },
     { id: 'heavy', label: 'Heavy Load', price: 220 },
     { id: 'perPiece', label: 'Per Piece', price: 220 },

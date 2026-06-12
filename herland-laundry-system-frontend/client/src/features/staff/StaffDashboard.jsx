@@ -237,21 +237,23 @@ export default function Dashboard() {
     fetchDashboardData();
   }, []);
 
-  const bookingReceivedCount = useMemo(() => {
-    return bookings.filter(isBookingReceived).length;
-  }, [bookings]);
-
-  const verifyPaymentCount = useMemo(() => {
-    return bookings.filter(isVerifyPayment).length;
-  }, [bookings]);
-
-  const laundryInProgressCount = useMemo(() => {
-    return bookings.filter(isLaundryInProgress).length;
-  }, [bookings]);
-
   const bookingsToday = useMemo(() => {
     return bookings.filter((booking) => isToday(booking.created_at));
   }, [bookings]);
+
+  const bookingReceivedCount = useMemo(() => {
+    return bookingsToday.filter(isBookingReceived).length;
+  }, [bookingsToday]);
+
+  const verifyPaymentCount = useMemo(() => {
+    return bookingsToday.filter(isVerifyPayment).length;
+  }, [bookingsToday]);
+
+  const laundryInProgressCount = useMemo(() => {
+    return bookingsToday.filter(isLaundryInProgress).length;
+  }, [bookingsToday]);
+
+
 
   return (
     <div className="min-h-screen w-full" style={{ background: Colors.skyFaint }}>

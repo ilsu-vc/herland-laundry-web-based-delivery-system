@@ -722,45 +722,6 @@ export default function CompletedTasks() {
 							</div>
 						</div>
 
-						{/* Receipt */}
-						<div style={{
-							background: C.white,
-							borderRadius: '1rem',
-							border: `1px solid ${C.skyBd}`,
-							boxShadow: '0 2px 12px rgba(56,120,194,0.06)',
-							padding: '1.25rem',
-							marginBottom: 12,
-						}}>
-							<p style={{
-								fontSize: '0.65rem',
-								fontWeight: 800,
-								letterSpacing: '0.09em',
-								textTransform: 'uppercase',
-								color: C.blueMuted,
-								marginBottom: 14,
-							}}>
-								Receipt
-							</p>
-
-							<button
-								onClick={() => navigate(`/bookings/${selectedBooking.dbId}/receipt`)}
-								style={{
-									width: '100%',
-									padding: '12px 0',
-									background: C.blue,
-									color: '#fff',
-									borderRadius: '0.75rem',
-									border: 'none',
-									fontSize: '0.9rem',
-									fontWeight: 700,
-									cursor: 'pointer',
-									fontFamily: 'inherit',
-									boxShadow: '0 4px 14px rgba(56,120,194,0.24)',
-								}}
-							>
-								View Receipt
-							</button>
-						</div>
 
 						{/* Navigation */}
 						<div style={{

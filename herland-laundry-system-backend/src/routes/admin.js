@@ -441,6 +441,32 @@ router.get('/services', verifyRole('Admin'), async (req, res) => {
                 estimatedHours: i.estimated_hours != null ? Number(i.estimated_hours) : 0,
             }));
 
+        let loadOptions = (items || [])
+            .filter(i => i.type === 'load')
+            .map(i => {
+                try {
+                    const parsed = JSON.parse(i.name);
+                    return {
+                        id: i.id,
+                        label: parsed.label || '',
+                        sublabel: parsed.sublabel || '',
+                        description: parsed.description || '',
+                        price: Number(i.current_price),
+                    };
+                } catch (e) {
+                    return null;
+                }
+            })
+            .filter(Boolean);
+
+        if (loadOptions.length === 0) {
+            loadOptions = [
+                { id: 'regular', label: 'Regular Light Mix', sublabel: 'Up to 7.5 kg', description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.', price: 220 },
+                { id: 'heavy', label: 'Heavy Load', sublabel: 'Up to 5 kg', description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.', price: 220 },
+                { id: 'perPiece', label: 'Per Piece', sublabel: '₱220 per item', description: 'Comforter, Duvet, Pillow, etc.', price: 220 },
+            ];
+        }
+
         const schedule = scheduleRows && scheduleRows.length > 0
             ? {
                 opens: scheduleRows[0].opens,
@@ -450,7 +476,7 @@ router.get('/services', verifyRole('Admin'), async (req, res) => {
             }
             : null;
 
-        res.json({ services, addOns, schedule });
+        res.json({ services, addOns, loadOptions, schedule });
     } catch (error) {
         console.error('Fetch Services Error:', error.message);
         res.status(500).json({ error: 'Failed to fetch services' });
@@ -507,10 +533,10 @@ router.post('/services/items', verifyRole('Admin'), async (req, res) => {
     }
 });
 
-// Route: Update a service or add-on price
+// Route: Update a service, add-on, or load price/details
 router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
     const { id } = req.params;
-    const { currentPrice, previousPrice, estimatedHours } = req.body;
+    const { currentPrice, previousPrice, estimatedHours, type, label, sublabel, description } = req.body;
 
     if (currentPrice === undefined) {
         return res.status(400).json({ error: 'currentPrice is required' });
@@ -520,19 +546,44 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
         const updateData = {
             current_price: Number(currentPrice),
         };
-        if (previousPrice !== undefined) {
-            updateData.previous_price = previousPrice !== null ? Number(previousPrice) : null;
-        }
-        if (estimatedHours !== undefined) {
-            updateData.estimated_hours = Number(estimatedHours);
+        
+        if (type === 'load') {
+             // For loads, we encode the label, sublabel, and description into the `name` column
+             updateData.name = JSON.stringify({ label, sublabel, description });
+        } else {
+            if (previousPrice !== undefined) {
+                updateData.previous_price = previousPrice !== null ? Number(previousPrice) : null;
+            }
+            if (estimatedHours !== undefined) {
+                updateData.estimated_hours = Number(estimatedHours);
+            }
         }
 
-        const { error } = await supabase
+        const { error, data } = await supabase
             .from('service_items')
             .update(updateData)
-            .eq('id', id);
+            .eq('id', id)
+            .select();
 
         if (error) throw error;
+        
+        // If it doesn't exist yet and it's a load type (because it was hardcoded), insert it!
+        if (!data || data.length === 0) {
+            if (type === 'load') {
+                const { error: insertError } = await supabase
+                    .from('service_items')
+                    .insert({
+                        id,
+                        type: 'load',
+                        name: JSON.stringify({ label, sublabel, description }),
+                        current_price: Number(currentPrice),
+                        sort_order: 99
+                    });
+                if (insertError) throw insertError;
+            } else {
+                 throw new Error("Item not found");
+            }
+        }
 
         res.json({ message: 'Item updated successfully' });
     } catch (error) {

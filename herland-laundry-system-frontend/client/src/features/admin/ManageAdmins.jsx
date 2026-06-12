@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import BottomNavbar from '../../shared/navigation/BottomNavbar'
+
 import InfoCard from '../../shared/components/InfoCard'
 import { RadioRow } from '../../shared/components/OptionInput'
 import { supabase } from '../../lib/supabase';
@@ -253,7 +253,7 @@ export default function ManageAdmins() {
         </div>
       </div>
 
-      <BottomNavbar />
+
     </div>
   );
 }

@@ -355,9 +355,14 @@ export default function ManageServices() {
         ? servicesData.services.map(normalizeItem)
         : fallbackServices;
 
+      const incomingLoadOptions = Array.isArray(servicesData.loadOptions) && servicesData.loadOptions.length > 0
+        ? servicesData.loadOptions
+        : defaultLoadOptions;
+
       const incomingSchedule = normalizeSchedule(servicesData.schedule);
 
       setServices(incomingServices.length ? incomingServices : fallbackServices);
+      setLoadOptions(incomingLoadOptions);
       setSchedule({
         opens: incomingSchedule.opens,
         closes: incomingSchedule.closes,
@@ -504,6 +509,27 @@ export default function ManageServices() {
         ) {
           setFetchError('Please enter a valid load type ID, label, sublabel, description, and price.');
           return;
+        }
+
+        const headers = await getAuthHeaders();
+
+        const response = await fetch(`${API_BASE}/services/items/${updatedLoad.id}`, {
+          method: 'PUT',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            currentPrice: Number(updatedLoad.price),
+            type: 'load',
+            label: updatedLoad.label,
+            sublabel: updatedLoad.sublabel,
+            description: updatedLoad.description,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Unable to update load type.');
         }
 
         setLoadOptions((prev) =>
