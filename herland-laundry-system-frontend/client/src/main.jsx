@@ -34,7 +34,17 @@ function AppShell() {
 
   useEffect(() => {
     const syncSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error } = await supabase.auth.getSession()
+
+      if (error) {
+        console.error('Session error:', error.message)
+        if (error.message.includes('Refresh Token') || error.message.includes('refresh token')) {
+          await supabase.auth.signOut().catch(() => {})
+          window.sessionStorage.removeItem('activeRole')
+          navigate('/login', { replace: true })
+          return
+        }
+      }
 
       if (session) {
         let role = window.sessionStorage.getItem('activeRole')
