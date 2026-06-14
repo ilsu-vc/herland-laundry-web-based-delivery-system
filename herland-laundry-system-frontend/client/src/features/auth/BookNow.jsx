@@ -697,8 +697,8 @@ function StepSelectServices({
   };
 
   const getStoredLoads = () => {
-    const stored = getStoredValue('bookingSelectedLoad', ['regular']);
-    return Array.isArray(stored) ? stored : [stored || 'regular'];
+    const stored = getStoredValue('bookingSelectedLoad', []);
+    return Array.isArray(stored) ? stored : [];
   };
 
   const [selectedLoads, setSelectedLoads] = useState(() => getStoredLoads());
@@ -790,11 +790,11 @@ function StepSelectServices({
 
       return {
         ...resetServices,
-        [serviceKey]: totalSelectedQuantity || 1,
+        [serviceKey]: totalSelectedQuantity,
       };
     });
 
-    setNumberOfBags(totalSelectedQuantity || 1);
+    setNumberOfBags(totalSelectedQuantity);
     setPaymentMethod('gcash');
   }, [availableServices, totalSelectedQuantity, setServices, setNumberOfBags, setPaymentMethod]);
 
@@ -811,7 +811,7 @@ function StepSelectServices({
     setServiceError("");
     setSelectedLoads(prev => {
       if (prev.includes(id)) {
-        return prev.length === 1 ? prev : prev.filter(loadId => loadId !== id);
+        return prev.filter(loadId => loadId !== id);
       }
 
       return [...prev, id];
