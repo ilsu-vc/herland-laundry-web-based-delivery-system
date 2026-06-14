@@ -214,7 +214,7 @@ export default function BookingHistory() {
 
   const [bookings, setBookings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active');
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

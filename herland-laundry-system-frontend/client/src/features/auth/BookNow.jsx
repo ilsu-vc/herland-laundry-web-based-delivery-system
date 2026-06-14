@@ -21,6 +21,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   const [searchParams] = useSearchParams();
   const editId = inlineEditId || searchParams.get("edit");
   const isEditMode = !!editId;
+  const [bookingLoaded, setBookingLoaded] = useState(!isEditMode);
   
   const [step, setStep] = useState(() => {
     if (isEditMode) return 1;
@@ -260,9 +261,9 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
               setCustomerLocation({
                 address: data.collectionDetails.pickupAddress || data.collectionDetails.deliveryAddress,
                 lat: data.collectionDetails.lat,
-                lng: data.collectionDetails.lng
               });
             }
+            setBookingLoaded(true);
           }
         } catch (err) {
           console.error("Error fetching booking for edit:", err);
@@ -306,7 +307,8 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
           setCustomerLocation(prev => ({
             ...prev,
             lat: coords.lat,
-            lng: coords.lng
+            lng: coords.lng,
+            address: ""
           }));
         }
         // Always navigate to Step 3 so users can manually type their address if they deny GPS
@@ -316,6 +318,14 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
       setStep(newStep);
     }
   };
+
+  if (!bookingLoaded) {
+    return (
+      <div className="flex justify-center items-center py-20 min-h-screen" style={{ backgroundColor: "#EFF8FC" }}>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#3878c2]"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen px-4 py-6 sm:px-3 md:px-2" style={{ backgroundColor: "#EFF8FC" }}>

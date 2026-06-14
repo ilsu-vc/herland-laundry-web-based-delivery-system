@@ -196,6 +196,17 @@ export default function BookingDetails() {
     navigate(`/book?edit=${bookingId}`);
   };
 
+  const handlePayNow = () => {
+    navigate('/payment', {
+      state: {
+        bookingReference: booking.referenceNumber || booking.id,
+        amountToPay: booking.paymentDetails?.amountToPay || booking.paymentDetails?.totalAmount,
+        paymentReference: booking.paymentDetails?.referenceNumber,
+        isDownpayment: booking.paymentDetails?.downpaymentRequired > 0
+      }
+    });
+  };
+
   const handleNextStatus = async () => {
     const statusKey = getBookingStatusKey(booking);
     let action = { ...ACTION_EFFECTS[statusKey] };
@@ -645,6 +656,16 @@ export default function BookingDetails() {
                     <p className="mt-1 text-xl font-black text-[#374151] font-mono tracking-wider">
                       {booking.paymentDetails.referenceNumber}
                     </p>
+                  </div>
+                )}
+                {!isAdminOrStaff && booking?.paymentDetails?.method === "GCash" && (!booking?.paymentDetails?.referenceNumber || booking?.paymentDetails?.referenceNumber === "-") && (
+                  <div className="sm:col-span-2 mt-2">
+                    <button
+                      onClick={handlePayNow}
+                      className="w-full rounded-lg border border-[#4bad40] bg-[#4bad40] px-3 py-2.5 text-sm font-bold text-white hover:bg-[#3e8e35] transition shadow-sm"
+                    >
+                      Submit GCash Reference
+                    </button>
                   </div>
                 )}
                 <div className="sm:col-span-2 space-y-3 mt-2 border-t border-[#f0f0f0] pt-4">
