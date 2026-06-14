@@ -29,6 +29,18 @@ const STATUS_META = {
     color: Colors.green,
     bg: 'rgba(75,173,64,0.1)',
   },
+  'Laundry Delivered': {
+    label: 'Delivery',
+    type: 'Delivery',
+    color: Colors.blueMuted,
+    bg: 'rgba(107,139,174,0.1)',
+  },
+  'Picked Up from Customer': {
+    label: 'Pickup',
+    type: 'Pickup',
+    color: Colors.blueMuted,
+    bg: 'rgba(107,139,174,0.1)',
+  },
   Delivered: {
     label: 'Delivery',
     type: 'Delivery',
@@ -203,11 +215,24 @@ function isTodayTask(booking) {
 }
 
 function isCompletedTask(booking) {
-  return booking.status === 'Picked Up' || booking.status === 'Delivered';
+  return booking.status === 'Picked Up' || booking.status === 'Delivered' || booking.status === 'Picked Up from Customer' || booking.status === 'Laundry Delivered';
 }
 
-function isActiveAssignedTask(booking) {
-  return booking.status === 'Rider Dispatched for Pickup' || booking.status === 'Out for Delivery';
+function isPastOrOverdue(booking) {
+  const today = toDateOnly(new Date());
+  const type = STATUS_META[booking.status]?.type || '';
+  
+  let taskDate = '';
+  if (type === 'Pickup') {
+    taskDate = toDateOnly(booking.pickupDate);
+  } else if (type === 'Delivery') {
+    taskDate = toDateOnly(booking.deliveryDate);
+  } else {
+    taskDate = toDateOnly(booking.pickupDate) || toDateOnly(booking.deliveryDate);
+  }
+
+  if (!taskDate) return false;
+  return taskDate < today;
 }
 
 function meta(booking) {
@@ -267,7 +292,7 @@ export default function RiderDashboard() {
     fetchDashboardData();
   }, []);
 
-  const [dashboardFilter, setDashboardFilter] = useState('Today');
+  const [dashboardFilter, setDashboardFilter] = useState('All');
 
   const categorizedTasks = useMemo(() => {
     const past = [];
@@ -302,12 +327,12 @@ export default function RiderDashboard() {
   }, [assignedBookings]);
 
   const activeAssignedTasks = useMemo(() => {
-    return categorizedTasks.todayTasks.filter(isActiveAssignedTask);
-  }, [categorizedTasks.todayTasks]);
+    return assignedBookings.filter(b => !isCompletedTask(b) && !isPastOrOverdue(b));
+  }, [assignedBookings]);
 
   const completedTasks = useMemo(() => {
-    return categorizedTasks.todayTasks.filter(isCompletedTask);
-  }, [categorizedTasks.todayTasks]);
+    return assignedBookings.filter(isCompletedTask);
+  }, [assignedBookings]);
 
 
 
