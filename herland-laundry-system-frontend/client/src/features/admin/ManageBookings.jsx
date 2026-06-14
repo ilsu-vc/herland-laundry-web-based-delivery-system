@@ -283,9 +283,9 @@ export default function ManageBookings() {
   const availableYears = useMemo(() => {
     const years = new Set();
     bookings.forEach((b) => {
-      const date = b.date || b.createdAt;
-      if (date) {
-        years.add(String(date).substring(0, 4));
+      const dateObj = parseDateString(b.createdAt || b.date);
+      if (dateObj) {
+        years.add(String(dateObj.getFullYear()));
       }
     });
     return Array.from(years).sort((a, b) => b.localeCompare(a));
@@ -294,12 +294,12 @@ export default function ManageBookings() {
   const availableMonths = useMemo(() => {
     const months = new Set();
     bookings.forEach((b) => {
-      const date = String(b.date || b.createdAt);
-      if (date) {
-        const y = date.substring(0, 4);
+      const dateObj = parseDateString(b.createdAt || b.date);
+      if (dateObj) {
+        const y = String(dateObj.getFullYear());
         if (!yearInput || y === yearInput) {
-          const m = date.substring(5, 7);
-          if (m && !isNaN(m)) months.add(m);
+          const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+          months.add(m);
         }
       }
     });
