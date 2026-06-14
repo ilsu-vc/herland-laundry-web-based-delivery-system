@@ -17,6 +17,18 @@ const C = {
 }
 
 const STATUS_META = {
+	'Laundry Delivered': {
+		label: 'Delivery',
+		type: 'Delivery',
+		color: C.blueMuted,
+		bg: 'rgba(107,139,174,0.1)',
+	},
+	'Picked Up from Customer': {
+		label: 'Pickup',
+		type: 'Pickup',
+		color: C.blueMuted,
+		bg: 'rgba(107,139,174,0.1)',
+	},
 	'Delivered': {
 		label: 'Delivery',
 		type: 'Delivery',
@@ -282,7 +294,12 @@ export default function CompletedTasks() {
 
 			const completedTasks = getListFromResponse(data)
 				.map(mapBookingData)
-				.filter((booking) => booking.status === 'Picked Up' || booking.status === 'Delivered')
+				.filter((booking) => 
+					booking.status === 'Picked Up' || 
+					booking.status === 'Delivered' ||
+					booking.status === 'Picked Up from Customer' || 
+					booking.status === 'Laundry Delivered'
+				)
 
 			setBookings(completedTasks)
 		} catch (err) {

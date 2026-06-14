@@ -29,6 +29,18 @@ const STATUS_META = {
 		color: C.green,
 		bg: 'rgba(75,173,64,0.1)',
 	},
+	'Laundry Delivered': {
+		label: 'Delivery',
+		type: 'Delivery',
+		color: C.blueMuted,
+		bg: 'rgba(107,139,174,0.1)',
+	},
+	'Picked Up from Customer': {
+		label: 'Pickup',
+		type: 'Pickup',
+		color: C.blueMuted,
+		bg: 'rgba(107,139,174,0.1)',
+	},
 	'Delivered': {
 		label: 'Delivery',
 		type: 'Delivery',

@@ -8,6 +8,7 @@ export default function Login() {
   const [value, setValue] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [keepSignedIn, setKeepSignedIn] = useState(false);
   const [warning, setWarning] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -41,6 +42,14 @@ export default function Login() {
 
     setLoading(true);
     setError('');
+
+    // Set the keepSignedIn flag BEFORE authenticating so the hybrid storage
+    // adapter knows where to persist the session tokens.
+    if (keepSignedIn) {
+      window.localStorage.setItem('keepSignedIn', 'true');
+    } else {
+      window.localStorage.removeItem('keepSignedIn');
+    }
 
     try {
       let emailToAuth = value;
@@ -301,6 +310,19 @@ export default function Login() {
                     <p className="text-xs sm:text-sm font-semibold text-red-600 text-center">{error}</p>
                 </div>
               )}
+
+              {/* Keep Me Signed In */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none group mt-1">
+                <input
+                  type="checkbox"
+                  checked={keepSignedIn}
+                  onChange={(e) => setKeepSignedIn(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-[#3878c2] focus:ring-[#3878c2]/50 cursor-pointer"
+                />
+                <span className="text-sm font-medium text-gray-500 group-hover:text-gray-700 transition-colors">
+                  Keep me signed in
+                </span>
+              </label>
 
               {/* Submit Button */}
               <button

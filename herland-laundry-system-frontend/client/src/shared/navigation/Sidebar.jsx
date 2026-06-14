@@ -382,6 +382,8 @@ export default function Sidebar({
     await supabase.auth.signOut();
 
     sessionStorage.removeItem('activeRole');
+    // Clear the "Keep me signed in" flag so the next login starts ephemeral by default
+    window.localStorage.removeItem('keepSignedIn');
 
     setSession(null);
     setUserProfile({

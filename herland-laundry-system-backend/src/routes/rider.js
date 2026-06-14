@@ -51,6 +51,53 @@ router.get('/assigned-bookings', verifyRole('Rider'), async (req, res) => {
 });
 
 /**
+ * @route   GET /api/v1/rider/completed-bookings
+ * @desc    Get bookings explicitly assigned to the logged-in rider that are completed
+ * @access  Rider
+ */
+router.get('/completed-bookings', verifyRole('Rider'), async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('bookings')
+            .select('*')
+            .eq('rider_id', req.user.id)
+            .in('status', ['Picked Up from Customer', 'Laundry Delivered', 'Picked Up', 'Delivered'])
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Fetch profiles for customer names
+        const userIds = [...new Set((data || []).map(b => b.user_id).filter(Boolean))];
+        let profilesMap = {};
+
+        if (userIds.length > 0) {
+            const { data: profiles, error: profileError } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', userIds);
+
+            if (profileError) {
+                console.error('Rider Fetch Profiles Error:', profileError.message);
+            } else if (profiles) {
+                profilesMap = Object.fromEntries(profiles.map(p => [p.id, { full_name: p.full_name }]));
+            }
+        }
+
+        const mapped = (data || []).map(b => {
+            const profile = profilesMap[b.user_id] || {};
+            return {
+                ...b,
+                customerName: profile.full_name || 'Unknown Customer'
+            };
+        });
+
+        res.json(mapped);
+    } catch (error) {
+        console.error('Rider Fetch Completed Bookings Error:', error.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+/**
  * @route   GET /api/v1/rider/available-bookings
  * @desc    Get bookings waiting for a rider that haven't been declined by the user
  * @access  Rider
