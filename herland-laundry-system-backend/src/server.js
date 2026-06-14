@@ -256,3 +256,16 @@ async function testConnection() {
 }
 
 testConnection();
+
+// --- Anti-Sleep Workaround ---
+// Ping the health endpoint every 14 minutes (840,000 ms) to prevent Render from putting the free instance to sleep.
+const RENDER_URL = 'https://laundry-booking-5gb4.onrender.com';
+setInterval(() => {
+    fetch(`${RENDER_URL}/api/v1/health`)
+        .then(res => {
+            console.log(`[Anti-Sleep] Pinged self successfully at ${new Date().toISOString()}`);
+        })
+        .catch(err => {
+            console.error(`[Anti-Sleep] Ping failed:`, err.message);
+        });
+}, 14 * 60 * 1000);
