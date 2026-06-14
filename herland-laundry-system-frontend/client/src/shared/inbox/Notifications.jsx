@@ -1,404 +1,546 @@
-import { useMemo, useState, useRef, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../../lib/supabase";
+import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router'
+import { supabase } from '../../lib/supabase'
 
-const USER_NOTIFICATIONS = [
-  {
-    id: "NTF-1029",
-    title: "Laundry ready for pickup",
-    message:
-      "Your booking HL-906735-6662 is ready. Drop by today before 7:00 PM.",
-    time: "Feb 7, 2026 · 10:15 AM",
-    read: false,
-  },
-  {
-    id: "NTF-1030",
-    title: "Payment confirmed",
-    message: "We have received your payment for booking HL-906735-6662.",
-    time: "Feb 6, 2026 · 2:08 PM",
-    read: false,
-  },
-  {
-    id: "NTF-1031",
-    title: "Driver en route",
-    message:
-      "Your pickup driver is on the way. Estimated arrival in 20 minutes.",
-    time: "Feb 6, 2026 · 9:40 AM",
-    read: false,
-  },
-  {
-    id: "NTF-1032",
-    title: "Booking accepted",
-    message:
-      "We have received your booking. We will update you once processing starts.",
-    time: "Feb 5, 2026 · 5:10 PM",
-    read: true,
-  },
-];
+const C = {
+	blue:      '#3878c2',
+	green:     '#4bad40',
+	sky:       '#63bce6',
+	bg:        '#ffffff',
+	skyBd:     'rgba(99,188,230,0.28)',
+	blueMuted: '#6b8bae',
+	white:     '#ffffff',
+	red:       '#e55353',
+	grayText:  '#b4b4b4',
+}
 
-const STAFF_NOTIFICATIONS = [
-  {
-    id: "STF-2101",
-    title: "New walk-in drop-off",
-    message: "Booking HL-906740-1021 has arrived at the front desk.",
-    time: "Feb 8, 2026 · 8:45 AM",
-    read: false,
-  },
-  {
-    id: "STF-2102",
-    title: "Machine maintenance check",
-    message: "Dryer #2 is due for a maintenance check before 3:00 PM today.",
-    time: "Feb 7, 2026 · 1:20 PM",
-    read: false,
-  },
-  {
-    id: "STF-2103",
-    title: "Rush booking assigned",
-    message: "Please prioritize booking HL-906738-9910 for same-day release.",
-    time: "Feb 6, 2026 · 11:05 AM",
-    read: true,
-  },
-];
+const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/notifications`
 
-const RIDER_NOTIFICATIONS = [
-  {
-    id: "RDR-3101",
-    title: "Pickup assigned",
-    message: "New pickup assigned: HL-906742-4408 at Batasan Hills.",
-    time: "Feb 8, 2026 · 9:12 AM",
-    read: false,
-  },
-  {
-    id: "RDR-3102",
-    title: "Customer not available",
-    message: "Customer for HL-906739-7753 requested a reschedule at 2:30 PM.",
-    time: "Feb 7, 2026 · 2:04 PM",
-    read: false,
-  },
-  {
-    id: "RDR-3103",
-    title: "Delivery completed",
-    message: "Delivery completed for HL-906736-2231. Proof photo uploaded.",
-    time: "Feb 6, 2026 · 5:28 PM",
-    read: true,
-  },
-];
+const FILTERS = ['Today', 'Unread', 'All']
 
-const ROLE_NOTIFICATIONS = {
-  user: USER_NOTIFICATIONS,
-  staff: STAFF_NOTIFICATIONS,
-  rider: RIDER_NOTIFICATIONS,
-};
+const ICONS = {
+	bell: (
+		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" width={20} height={20}>
+			<path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+		</svg>
+	),
+	trash: (
+		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" width={17} height={17}>
+			<path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+		</svg>
+	),
+}
 
-const FILTERS = ["All", "Unread", "Today"];
-const LONG_PRESS_DURATION = 600; // milliseconds
+const formatNotificationTime = (dateValue) => {
+	if (!dateValue) return ''
 
-const getRoleFromPath = (pathname = "") => {
-  if (pathname.startsWith("/staff")) return "staff";
-  if (pathname.startsWith("/rider")) return "rider";
-  return "user";
-};
+	const date = new Date(dateValue)
+
+	if (Number.isNaN(date.getTime())) return ''
+
+	return date.toLocaleString('en-US', {
+		month: 'short',
+		day: 'numeric',
+		year: 'numeric',
+		hour: 'numeric',
+		minute: '2-digit',
+	})
+}
+
+const mapNotification = (item) => ({
+	id: item.id,
+	title: item.title || 'Notification',
+	message: item.message || '',
+	created_at: item.created_at,
+	time: formatNotificationTime(item.created_at),
+	read: Boolean(item.is_read),
+})
 
 export default function Notifications() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  // We no longer manually pick role-based standard notifications,
-  // we fetch them fully from the backend for the current user.
-  const [filter, setFilter] = useState("All");
-  const [notifications, setNotifications] = useState([]);
-  const [selectedNotification, setSelectedNotification] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+	const navigate = useNavigate()
+	const [filter, setFilter] = useState('Today')
+	const [notifications, setNotifications] = useState([])
+	const [isLoading, setIsLoading] = useState(true)
+	const [error, setError] = useState('')
+	const [deleteTargetId, setDeleteTargetId] = useState(null)
 
-  const pressTimer = useRef(null);
+	const getToken = useCallback(async () => {
+		const {
+			data: { session },
+		} = await supabase.auth.getSession()
 
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
+		return session?.access_token
+	}, [])
 
-  const fetchNotifications = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
-      
-      // Fetch notifications safely from the secure endpoint without passing userId manually
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/notifications`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        // Transform backend timestamp to readable time string
-        const mappedData = data.map(item => ({
-          id: item.id,
-          title: item.title,
-          message: item.message,
-          read: item.read,
-          time: new Date(item.created_at).toLocaleString('en-US', {
-            month: 'short', day: 'numeric', year: 'numeric',
-            hour: 'numeric', minute: '2-digit', hour12: true
-          })
-        }));
-        setNotifications(mappedData);
-      }
-    } catch (err) {
-      console.error("Failed to fetch notifications:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+	const fetchNotifications = useCallback(async () => {
+		setIsLoading(true)
+		setError('')
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
+		try {
+			const token = await getToken()
 
-  const filteredNotifications = useMemo(() => {
-    if (filter === "Unread") return notifications.filter((n) => !n.read);
-    return notifications;
-  }, [filter, notifications]);
+			if (!token) {
+				setNotifications([])
+				setError('Please log in to view your notifications.')
+				return
+			}
 
-  const toggleRead = async (id) => {
-    const item = notifications.find(n => n.id === id);
-    if (!item || item.read) return; // Only process if unread
-    
-    // Optimistic update
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+			const response = await fetch(API_BASE, {
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+			})
 
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
+			if (!response.ok) {
+				throw new Error('Failed to fetch notifications.')
+			}
 
-      await fetch(`${import.meta.env.VITE_API_URL}/api/v1/notifications/${id}/read`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-    } catch (err) {
-      console.error("Failed to mark notification read:", err);
-    }
-  };
+			const data = await response.json()
+			const notificationList = Array.isArray(data) ? data : data.notifications || []
 
-  const markAllRead = async () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
+			setNotifications(notificationList.map(mapNotification))
+		} catch (err) {
+			console.error('Fetch notifications error:', err)
+			setError('Unable to load notifications.')
+			setNotifications([])
+		} finally {
+			setIsLoading(false)
+		}
+	}, [getToken])
 
-      await fetch(`${import.meta.env.VITE_API_URL}/api/v1/notifications/read-all`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-    } catch (err) {
-      console.error("Failed to mark all as read:", err);
-    }
-  };
+	useEffect(() => {
+		fetchNotifications()
+	}, [fetchNotifications])
 
-  const startPressTimer = (item) => {
-    pressTimer.current = setTimeout(() => {
-      setSelectedNotification(item);
-      setIsModalOpen(true);
-    }, LONG_PRESS_DURATION);
-  };
+	const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications])
 
-  const clearPressTimer = () => {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
-  };
+	const todayUnreadCount = useMemo(() => {
+		const today = new Date().toDateString()
+		return notifications.filter(n => !n.read && new Date(n.created_at).toDateString() === today).length
+	}, [notifications])
 
-  const deleteNotification = async (id) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    setIsModalOpen(false);
-    setSelectedNotification(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
+	const filtered = useMemo(() => {
+		if (filter === 'Unread') return notifications.filter(n => !n.read)
 
-      await fetch(`${import.meta.env.VITE_API_URL}/api/v1/notifications/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-    } catch (err) {
-      console.error("Failed to delete notification:", err);
-    }
-  };
+		if (filter === 'Today') {
+			const today = new Date().toDateString()
+			return notifications.filter(n => new Date(n.created_at).toDateString() === today)
+		}
 
-  const handleToggleRead = () => {
-    if (selectedNotification) {
-      toggleRead(selectedNotification.id);
-      setIsModalOpen(false);
-      setSelectedNotification(null);
-    }
-  };
+		return notifications
+	}, [filter, notifications])
 
-  return (
-    <div className="min-h-screen bg-white px-4 py-6 sm:py-10">
-      <div className="mx-auto w-full max-w-2xl md:max-w-5xl lg:max-w-6xl">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-[#3878c2]">
-              <button
-                type="button"
-                onClick={() => navigate(-1)}
-                className="inline-flex items-center"
-                aria-label="Go back"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-                </svg>
-              </button>
-              <h1 className="text-2xl font-semibold">Notifications</h1>
-            </div>
-            <p className="text-sm text-[#b4b4b4]">
-              {unreadCount === 0
-                ? "You are all caught up."
-                : `${unreadCount} unread message${unreadCount > 1 ? "s" : ""}`}
-            </p>
-          </div>
+	const getChipCount = (chip) => {
+		if (chip === 'Today') return todayUnreadCount
+		if (chip === 'Unread') return unreadCount
+		if (chip === 'All') return unreadCount
+		return 0
+	}
 
-          <button
-            type="button"
-            onClick={markAllRead}
-            disabled={unreadCount === 0}
-            className="text-sm font-semibold text-[#4bad40] disabled:text-[#b4b4b4]"
-          >
-            Mark all as read
-          </button>
-        </header>
+	const toggleNotificationRead = async (id) => {
+		const item = notifications.find(n => n.id === id)
 
-        {/* Filters */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          {FILTERS.map((item) => {
-            const isActive = filter === item;
-            return (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setFilter(item)}
-                className={`rounded-full px-3 py-1.5 text-xs sm:px-4 sm:text-sm font-semibold transition ${
-                  isActive
-                    ? "bg-[#63bce6] text-white"
-                    : "border border-[#3878c2] text-[#3878c2] hover:bg-[#63bce6]/20"
-                }`}
-              >
-                {item}
-              </button>
-            );
-          })}
-        </div>
+		if (!item) return
 
-        {/* Notifications List */}
-        {isLoading ? (
-          <div className="flex min-h-[60vh] flex-col items-center justify-center text-center space-y-4">
-             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#3878c2]"></div>
-          </div>
-        ) : filteredNotifications.length === 0 ? (
-          <div className="flex min-h-[60vh] flex-col items-center justify-center text-center space-y-6">
-            <img
-              src="/images/WashingMachine.png"
-              alt="Washing Machine"
-              className="h-48 w-auto"
-            />
-            <p className="text-lg text-[#b4b4b4]">
-              No notifications right now.
-            </p>
-          </div>
-        ) : (
-          <ul className="divide-y">
-            {filteredNotifications.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => toggleRead(item.id)}
-                  onMouseDown={() => startPressTimer(item)}
-                  onMouseUp={clearPressTimer}
-                  onMouseLeave={clearPressTimer}
-                  onTouchStart={() => startPressTimer(item)}
-                  onTouchEnd={clearPressTimer}
-                  className={`w-full px-3 py-4 text-left transition ${
-                    item.read ? "bg-white" : "bg-[#63bce6]/10"
-                  }`}
-                >
-                  <h2
-                    className={`text-sm transition-colors ${
-                      item.read
-                        ? "font-medium text-[#9ca3af]"
-                        : "font-semibold text-[#3878c2]"
-                    }`}
-                  >
-                    {item.title}
-                  </h2>
-                  <p
-                    className={`mt-1 text-sm transition-colors ${
-                      item.read ? "text-[#b4b4b4]" : "text-[#374151]"
-                    }`}
-                  >
-                    {item.message}
-                  </p>
-                  <p className="mt-1 text-xs text-[#b4b4b4]">{item.time}</p>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+		const nextReadState = !item.read
+		const previousNotifications = notifications
 
-        {/* Long Press Modal */}
-        {isModalOpen && selectedNotification && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-            <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-lg">
-              
-              <h3 className="mb-2 text-lg font-semibold text-[#3878c2]">
-                {selectedNotification.title}
-              </h3>
+		setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: nextReadState } : n))
 
-              <p className="mb-6 text-sm text-[#374151]">
-                {selectedNotification.message}
-              </p>
+		try {
+			const token = await getToken()
 
-              <div className="flex flex-col gap-3">
-                
-                {/* Primary Action */}
-                <button
-                  onClick={handleToggleRead}
-                  className="w-full rounded-lg bg-[#4bad40] py-2.5 font-semibold text-white"
-                >
-                  {selectedNotification.read
-                    ? "Mark as unread"
-                    : "Mark as read"}
-                </button>
+			if (!token) {
+				throw new Error('No auth token found.')
+			}
 
-                {/* Secondary Action */}
-                <button
-                  onClick={() => deleteNotification(selectedNotification.id)}
-                  className="w-full rounded-lg border border-[#3878c2] py-2.5 font-semibold text-[#3878c2]"
-                >
-                  Delete
-                </button>
+			const response = await fetch(`${API_BASE}/${id}/${nextReadState ? 'read' : 'unread'}`, {
+				method: 'PATCH',
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+			})
 
-                {/* Secondary Action */}
-                <button
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setSelectedNotification(null);
-                  }}
-                  className="w-full rounded-lg border border-[#3878c2] py-2.5 font-semibold text-[#3878c2]"
-                >
-                  Cancel
-                </button>
+			if (!response.ok) {
+				throw new Error(`Failed to mark notification as ${nextReadState ? 'read' : 'unread'}.`)
+			}
+		} catch (err) {
+			console.error('Toggle notification read error:', err)
 
-              </div>
-            </div>
-          </div>
-        )}
+			setNotifications(previousNotifications)
+			setError(`Unable to mark notification as ${nextReadState ? 'read' : 'unread'}.`)
+		}
+	}
 
-      </div>
-    </div>
-  );
+	const markAllRead = async () => {
+		if (unreadCount === 0) return
+
+		const previousNotifications = notifications
+
+		setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+
+		try {
+			const token = await getToken()
+
+			if (!token) {
+				throw new Error('No auth token found.')
+			}
+
+			const response = await fetch(`${API_BASE}/read-all`, {
+				method: 'PATCH',
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+			})
+
+			if (!response.ok) {
+				throw new Error('Failed to mark all notifications as read.')
+			}
+		} catch (err) {
+			console.error('Mark all notifications read error:', err)
+
+			setNotifications(previousNotifications)
+			setError('Unable to mark all notifications as read.')
+		}
+	}
+
+	const requestDeleteNotification = (id) => {
+		setDeleteTargetId(id)
+	}
+
+	const cancelDeleteNotification = () => {
+		setDeleteTargetId(null)
+	}
+
+	const confirmDeleteNotification = async () => {
+		if (!deleteTargetId) return
+
+		const id = deleteTargetId
+		const previousNotifications = notifications
+
+		setDeleteTargetId(null)
+		setNotifications(prev => prev.filter(n => n.id !== id))
+
+		try {
+			const token = await getToken()
+
+			if (!token) {
+				throw new Error('No auth token found.')
+			}
+
+			const response = await fetch(`${API_BASE}/${id}`, {
+				method: 'DELETE',
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+			})
+
+			if (!response.ok) {
+				throw new Error('Failed to delete notification.')
+			}
+		} catch (err) {
+			console.error('Delete notification error:', err)
+
+			setNotifications(previousNotifications)
+			setError('Unable to delete notification.')
+		}
+	}
+
+	return (
+		<div style={{ minHeight: '100vh', background: C.bg, fontFamily: 'Inter, -apple-system, sans-serif' }}>
+
+			{/* ── Header ──────────────────────────────────────────────────────── */}
+			<div style={{ background: C.white, borderBottom: `1px solid ${C.skyBd}`, padding: '16px 20px' }}>
+				<div>
+					<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+						<div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+							<button
+								type="button"
+								onClick={() => navigate(-1)}
+								style={{
+									background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+									color: C.blue, display: 'flex', alignItems: 'center',
+								}}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" width={22} height={22}>
+									<path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+								</svg>
+							</button>
+							<div>
+								<h1 style={{ fontSize: '1.1875rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em', margin: 0 }}>
+									Notifications
+								</h1>
+								<p style={{ fontSize: '0.75rem', color: C.blueMuted, marginTop: 1, marginBottom: 0 }}>
+									{unreadCount === 0
+										? 'You are all caught up.'
+										: `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`}
+								</p>
+							</div>
+						</div>
+
+						<button
+							type="button"
+							onClick={markAllRead}
+							disabled={unreadCount === 0}
+							style={{
+								background: 'none', border: 'none', cursor: unreadCount === 0 ? 'default' : 'pointer',
+								fontSize: '0.8125rem', fontWeight: 700,
+								color: unreadCount === 0 ? C.skyBd : C.green,
+								fontFamily: 'inherit', flexShrink: 0,
+								padding: 0,
+							}}
+						>
+							Mark all as read
+						</button>
+					</div>
+				</div>
+			</div>
+
+			{/* ── Filter chips ────────────────────────────────────────────────── */}
+			<div style={{ background: C.white, borderBottom: `1px solid ${C.skyBd}` }}>
+				<div style={{ display: 'flex', gap: 8, padding: '14px 20px' }}>
+					{FILTERS.map(chip => {
+						const active = filter === chip
+						const chipCount = getChipCount(chip)
+
+						return (
+							<button
+								key={chip}
+								type="button"
+								onClick={() => setFilter(chip)}
+								style={{
+									padding: '5px 16px',
+									borderRadius: '2rem',
+									border: active ? `1.5px solid ${C.blue}` : `1.5px solid ${C.skyBd}`,
+									background: active ? 'rgba(56,120,194,0.1)' : C.white,
+									color: active ? C.blue : C.blueMuted,
+									fontSize: '0.8125rem', fontWeight: active ? 700 : 500,
+									cursor: 'pointer', fontFamily: 'inherit',
+									transition: 'all 0.15s',
+								}}
+							>
+								{chip}
+								{chipCount > 0 && (
+									<span style={{
+										marginLeft: 6,
+										fontSize: '0.6875rem', fontWeight: 800,
+										background: active ? C.blue : 'rgba(56,120,194,0.12)',
+										color: active ? C.white : C.blue,
+										borderRadius: '2rem', padding: '0px 6px',
+									}}>
+										{chipCount}
+									</span>
+								)}
+							</button>
+						)
+					})}
+				</div>
+			</div>
+
+			{/* ── List ────────────────────────────────────────────────────────── */}
+			<div style={{ padding: '16px 20px 120px' }}>
+
+				{error && (
+					<div style={{
+						background: 'rgba(229,83,83,0.08)',
+						border: '1px solid rgba(229,83,83,0.2)',
+						color: C.red,
+						borderRadius: '0.875rem',
+						padding: '0.75rem 1rem',
+						fontSize: '0.8125rem',
+						fontWeight: 600,
+						marginBottom: 12,
+					}}>
+						{error}
+					</div>
+				)}
+
+				{isLoading && (
+					<div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}>
+						<div style={{
+							width: 32, height: 32, borderRadius: '50%',
+							border: `3px solid ${C.skyBd}`,
+							borderTopColor: C.blue,
+							animation: 'spin 0.7s linear infinite',
+						}} />
+						<style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+					</div>
+				)}
+
+				{!isLoading && filtered.length === 0 && (
+					<div style={{
+						minHeight: '60vh',
+						display: 'flex',
+						flexDirection: 'column',
+						alignItems: 'center',
+						justifyContent: 'center',
+						textAlign: 'center',
+						gap: 24,
+					}}>
+						<img
+							src="/images/WashingMachine.png"
+							alt="No notifications"
+							style={{
+								height: 192,
+								width: 'auto',
+								display: 'block',
+							}}
+						/>
+
+						<div>
+							<h2 style={{
+								fontSize: '1.125rem',
+								fontWeight: 600,
+								color: C.blue,
+								margin: 0,
+							}}>
+								No notifications yet
+							</h2>
+							<p style={{
+								marginTop: 4,
+								marginBottom: 0,
+								fontSize: '0.875rem',
+								color: C.grayText,
+							}}>
+								You are all caught up. New updates will appear here.
+							</p>
+						</div>
+					</div>
+				)}
+
+				{!isLoading && filtered.length > 0 && (
+					<div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+						{filtered.map(item => (
+							<div
+								key={item.id}
+								style={{
+									background: item.read ? C.white : 'rgba(56,120,194,0.04)',
+									borderRadius: '1rem',
+									border: `1px solid ${item.read ? C.skyBd : 'rgba(56,120,194,0.22)'}`,
+									boxShadow: item.read ? 'none' : '0 2px 12px rgba(56,120,194,0.07)',
+									display: 'flex',
+									alignItems: 'flex-start',
+									gap: 12,
+									padding: '1rem 1rem 1rem 1.125rem',
+									overflow: 'hidden',
+									position: 'relative',
+								}}
+							>
+								{/* Unread left bar */}
+								{!item.read && (
+									<div style={{
+										position: 'absolute', left: 0, top: 0, bottom: 0,
+										width: 4, background: C.blue, borderRadius: '4px 0 0 4px',
+									}} />
+								)}
+
+								{/* Content */}
+								<div style={{ flex: 1, minWidth: 0 }}>
+									<p style={{
+										fontSize: '0.875rem',
+										fontWeight: item.read ? 500 : 700,
+										color: item.read ? C.blueMuted : '#1f2937',
+										marginTop: 0,
+										marginBottom: 3,
+									}}>
+										{item.title}
+									</p>
+									<p style={{
+										fontSize: '0.8125rem',
+										color: item.read ? C.blueMuted : '#374151',
+										lineHeight: 1.5,
+										marginTop: 0,
+										marginBottom: 6,
+									}}>
+										{item.message}
+									</p>
+									<p style={{
+										fontSize: '0.6875rem',
+										color: item.read ? C.blueMuted : '#374151',
+										fontWeight: 500,
+										margin: 0,
+									}}>
+										{item.time}
+									</p>
+								</div>
+
+								{/* Actions */}
+								<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+									<button
+										type="button"
+										onClick={(e) => { e.stopPropagation(); requestDeleteNotification(item.id) }}
+										style={{
+											background: 'none', border: 'none', cursor: 'pointer',
+											color: C.skyBd, padding: 4,
+											display: 'flex', alignItems: 'center', justifyContent: 'center',
+											borderRadius: '0.5rem',
+										}}
+										onMouseEnter={e => e.currentTarget.style.color = C.red}
+										onMouseLeave={e => e.currentTarget.style.color = C.skyBd}
+									>
+										{ICONS.trash}
+									</button>
+
+									<button
+										type="button"
+										onClick={(e) => { e.stopPropagation(); toggleNotificationRead(item.id) }}
+										style={{
+											background: 'none', border: 'none', cursor: 'pointer',
+											fontSize: '0.6875rem', fontWeight: 700,
+											color: C.blueMuted,
+											fontFamily: 'inherit', padding: '2px 4px',
+											whiteSpace: 'nowrap',
+										}}
+									>
+										{item.read ? 'Mark unread' : 'Mark read'}
+									</button>
+								</div>
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+
+			{/* Delete Confirmation Modal */}
+			{deleteTargetId && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+					<div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-lg">
+
+						<div className="mb-4 flex justify-center">
+							<div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-50 text-[#e55353]">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" width={42} height={42}>
+									<path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+								</svg>
+							</div>
+						</div>
+
+						<h3 className="mb-2 text-lg font-semibold text-[#3878c2]">
+							Delete Notification?
+						</h3>
+						<p className="mb-6 text-sm text-[#374151]">
+							Are you sure you want to delete this notification?
+						</p>
+
+						<div className="flex flex-col gap-3">
+							<button
+								type="button"
+								onClick={confirmDeleteNotification}
+								className="w-full rounded-lg bg-[#4bad40] py-2.5 font-semibold text-white"
+							>
+								Delete
+							</button>
+							<button
+								type="button"
+								onClick={cancelDeleteNotification}
+								className="w-full rounded-lg border border-[#3878c2] py-2.5 font-semibold text-[#3878c2]"
+							>
+								Cancel
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+		</div>
+	)
 }

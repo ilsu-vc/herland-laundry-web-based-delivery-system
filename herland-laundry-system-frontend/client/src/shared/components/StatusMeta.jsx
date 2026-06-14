@@ -3,12 +3,13 @@ export const STATUS_META = {
   BookingAccepted: { label: "Booking Accepted", color: "#ffde59" },
   BookingEdited: { label: "Booking Edited", color: "#ffde59" },
   PaymentConfirmed: { label: "Payment Confirmed", color: "#ffde59" },
-  RiderDispatchedForPickup: { label: "Rider Dispatched for Pickup", color: "#3878c2" },
-  PickedUpFromCustomer: { label: "Picked Up from Customer", color: "#3878c2" },
-  InProgress: { label: "In Progress", color: "#ffde59" },
-  OutForDelivery: { label: "Out for Delivery", color: "#63bce6" },
-  ReadyForPickup: { label: "Ready for Pick-up", color: "#63bce6" },
-  BookingCompleted: { label: "Booking Completed", color: "#4bad40" },
+  RiderDispatchedForPickup: { label: "Rider Dispatched for Pickup", color: "#ffde59" },
+  PickedUpFromCustomer: { label: "Picked Up from Customer", color: "#ffde59" },
+  InProgress: { label: "Laundry In Progress", color: "#ffde59" },
+  OutForDelivery: { label: "Out for Delivery", color: "#ffde59" },
+  ReadyForPickup: { label: "Ready for Pick-up", color: "#ffde59" },
+  LaundryDelivered: { label: "Laundry Delivered", color: "#63bce6" },
+  FeedbackSubmitted: { label: "Feedback Submitted", color: "#4bad40" },
   BookingCancelled: { label: "Booking Cancelled", color: "#ff0000" },
   PaymentFlagged: { label: "Payment Flagged", color: "#ff0000" },
 };
@@ -23,7 +24,8 @@ export const STATUS_ORDER = [
   "InProgress",
   "ReadyForPickup",
   "OutForDelivery",
-  "BookingCompleted",
+  "LaundryDelivered",
+  "FeedbackSubmitted",
   "BookingCancelled",
   "PaymentFlagged",
 ];
@@ -41,7 +43,8 @@ export const ACTIVE_STATUSES = [
 ];
 
 export const PAST_STATUSES = [
-  "BookingCompleted",
+  "LaundryDelivered",
+  "FeedbackSubmitted",
   "BookingCancelled",
   "PaymentFlagged",
 ];
@@ -65,7 +68,7 @@ export const getStatusKey = (status = "") => {
   if (lower.includes("picked up from customer") || lower === "picked_up")
     return "PickedUpFromCustomer";
   if (lower === "flagged" || lower.includes("flagged")) return "PaymentFlagged";
-  if (lower.includes("in progress") || lower === "progress")
+  if (lower.includes("laundry in progress") || lower === "progress")
     return "InProgress";
   if (lower.includes("ready for pick") || lower === "ready")
     return "ReadyForPickup";
@@ -74,11 +77,19 @@ export const getStatusKey = (status = "") => {
   if (lower === "cancelled" || lower.includes("cancelled"))
     return "BookingCancelled";
   if (
+    lower === "laundry delivered" ||
+    lower.includes("laundry delivered") ||
+    lower === "delivered" ||
     lower === "completed" ||
-    lower.includes("completed") ||
-    lower === "delivered"
+    lower.includes("completed")
   )
-    return "BookingCompleted";
+    return "LaundryDelivered";
+  if (
+    lower === "feedback submitted" ||
+    lower.includes("feedback submitted") ||
+    lower.includes("feedback")
+  )
+    return "FeedbackSubmitted";
   return "BookingReceived";
 };
 

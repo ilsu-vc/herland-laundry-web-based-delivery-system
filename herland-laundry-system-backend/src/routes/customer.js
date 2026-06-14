@@ -45,6 +45,32 @@ router.get('/services', async (req, res) => {
                 estimatedHours: i.estimated_hours != null ? Number(i.estimated_hours) : 0,
             }));
 
+        let loadOptions = (items || [])
+            .filter(i => i.type === 'load')
+            .map(i => {
+                try {
+                    const parsed = JSON.parse(i.name);
+                    return {
+                        id: i.id,
+                        label: parsed.label || '',
+                        sublabel: parsed.sublabel || '',
+                        description: parsed.description || '',
+                        price: Number(i.current_price),
+                    };
+                } catch (e) {
+                    return null;
+                }
+            })
+            .filter(Boolean);
+
+        if (loadOptions.length === 0) {
+            loadOptions = [
+                { id: 'regular', label: 'Regular Light Mix', sublabel: 'Up to 7.5 kg', description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.', price: 220 },
+                { id: 'heavy', label: 'Heavy Load', sublabel: 'Up to 5 kg', description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.', price: 220 },
+                { id: 'perPiece', label: 'Per Piece', sublabel: '₱220 per item', description: 'Comforter, Duvet, Pillow, etc.', price: 220 },
+            ];
+        }
+
         let { data: faqs, error: faqsError } = await supabase
             .from('faqs')
             .select('*')
@@ -70,7 +96,7 @@ router.get('/services', async (req, res) => {
             answer: f.answer
         }));
 
-        res.json({ services, addOns, schedule: scheduleRows?.[0] || null, faqs: formattedFaqs });
+        res.json({ services, addOns, loadOptions, schedule: scheduleRows?.[0] || null, faqs: formattedFaqs });
     } catch (error) {
         console.error('Fetch Services Error:', error.message);
         res.status(500).json({ error: 'Failed to fetch services' });
@@ -216,6 +242,19 @@ router.post('/book', requireAuth, async (req, res) => {
         }
         // ────────────────────────────────────────────────────────────────────────
 
+        let assignedRiderId = null;
+        if (option === 'pickedUpDelivered' || option === 'dropOffDelivered') {
+            const { data: riders } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('role', 'Rider');
+
+            if (riders && riders.length > 0) {
+                const randomIndex = Math.floor(Math.random() * riders.length);
+                assignedRiderId = riders[randomIndex].id;
+            }
+        }
+
         const { data, error } = await supabase
             .from('bookings')
             .insert([
@@ -232,6 +271,7 @@ router.post('/book', requireAuth, async (req, res) => {
                     collection_details: collection_details || null,
                     payment_details: payment_details || null,
                     notes: notes || '',
+                    rider_id: assignedRiderId,
                 },
             ])
             .select()
@@ -249,6 +289,11 @@ router.post('/book', requireAuth, async (req, res) => {
 
         // Send Notification
         notificationService.notify(req.user.id, 'BOOKING_CREATED', data.reference_number || data.id);
+
+        // Notify auto-assigned rider
+        if (assignedRiderId) {
+            notificationService.notify(assignedRiderId, 'CUSTOM', data.reference_number || data.id, 'A new booking has been auto-assigned to you.');
+        }
     } catch (error) {
         console.error('Error creating booking:', error.message || error);
         res.status(500).json({ error: 'Failed to create booking. Please try again.' });
@@ -280,6 +325,7 @@ function normalizeBooking(b) {
         status: b.status || 'pending',
         notes: b.notes || '',
         created_at: b.created_at || null,
+        rider_id: b.rider_id || null,
     };
 }
 
@@ -339,14 +385,32 @@ router.get('/my-bookings/:id', requireAuth, async (req, res) => {
             .maybeSingle();
 
         const hasBypass = profile?.role === 'Admin' || profile?.role === 'Staff';
-        const booking = await getBookingByIdOrRef(id, req.user.id, hasBypass);
+        let booking = null;
+
+        if (hasBypass || profile?.role === 'Rider') {
+            // For riders, we check if they are the assigned rider later
+            booking = await getBookingByIdOrRef(id, req.user.id, true);
+            
+            if (booking && profile?.role === 'Rider' && booking.rider_id !== req.user.id) {
+                return res.status(403).json({ error: 'Unauthorized to view this booking' });
+            }
+        } else {
+            booking = await getBookingByIdOrRef(id, req.user.id, false);
+        }
 
         if (!booking) {
-            console.log(`[DEBUG] Booking ${id} not found for user ${req.user.id}`);
+            console.log(`[DEBUG] Booking ${id} not found or unauthorized for user ${req.user.id}`);
             return res.status(404).json({ error: 'Booking not found' });
         }
 
-        res.json(normalizeBooking(booking));
+        const { data: customerFeedback } = await supabase.from('customer_feedback').select('*').eq('booking_id', booking.id).maybeSingle();
+        const { data: riderFeedback } = await supabase.from('rider_feedback').select('*').eq('booking_id', booking.id).maybeSingle();
+
+        const responseData = normalizeBooking(booking);
+        responseData.customer_feedback = customerFeedback || null;
+        responseData.rider_feedback = riderFeedback || null;
+
+        res.json(responseData);
     } catch (error) {
         console.error('Fetch Single Booking Error:', error.message);
         res.status(500).json({ error: 'Failed to fetch booking' });
@@ -635,21 +699,21 @@ router.patch('/my-bookings/:id/update', requireAuth, async (req, res) => {
 // ─── Submit Feedback ──────────────────────────────────────────────────────────
 router.patch('/my-bookings/:id/feedback', requireAuth, async (req, res) => {
     const { id } = req.params;
-    const { rating, comment } = req.body;
+    const { customer_feedback, rider_feedback } = req.body;
 
-    if (!rating || rating < 1 || rating > 5) {
-        return res.status(400).json({ error: 'Valid rating (1-5) is required' });
+    if (!customer_feedback || !customer_feedback.rating || customer_feedback.rating < 1 || customer_feedback.rating > 5) {
+        return res.status(400).json({ error: 'Valid laundry rating (1-5) is required' });
+    }
+
+    if (!rider_feedback || !rider_feedback.rating || rider_feedback.rating < 1 || rider_feedback.rating > 5) {
+        return res.status(400).json({ error: 'Valid rider rating (1-5) is required' });
     }
 
     try {
         // Verify booking belongs to user and is completed
-        const { data: booking, error: fetchError } = await supabase
-            .from('bookings')
-            .select('user_id, status, feedback')
-            .eq('id', id)
-            .single();
+        const booking = await getBookingByIdOrRef(id, req.user.id);
 
-        if (fetchError || !booking) {
+        if (!booking) {
             return res.status(404).json({ error: 'Booking not found' });
         }
 
@@ -657,27 +721,44 @@ router.patch('/my-bookings/:id/feedback', requireAuth, async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 
-        const terminalStatuses = ['delivered', 'completed', 'Booking Completed'];
-        if (!terminalStatuses.includes(booking.status)) {
+        const terminalStatuses = ['delivered', 'completed', 'booking completed'];
+        if (!terminalStatuses.includes((booking.status || '').toLowerCase())) {
             return res.status(400).json({ error: 'Feedback can only be provided for completed bookings' });
         }
 
-        const feedbackData = {
-            rating,
-            comment,
-            submitted_at: new Date().toISOString()
+        // Check if feedback already exists to prevent duplicate
+        const { data: existingCustomerFeedback } = await supabase.from('customer_feedback').select('id').eq('booking_id', booking.id).maybeSingle();
+        if (existingCustomerFeedback) {
+             return res.status(400).json({ error: 'Feedback has already been submitted for this booking.' });
+        }
+
+        // Insert into customer_feedback
+        const customerFeedbackPayload = {
+            booking_id: booking.id,
+            user_id: req.user.id,
+            rating: customer_feedback.rating,
+            review_tags: customer_feedback.review_tags || [],
+            review_comment: customer_feedback.review_comment || null,
         };
 
-        const { data, error } = await supabase
-            .from('bookings')
-            .update({ feedback: feedbackData })
-            .eq('id', id)
-            .select()
-            .single();
+        const { error: cfError } = await supabase.from('customer_feedback').insert([customerFeedbackPayload]);
+        if (cfError) throw cfError;
 
-        if (error) throw error;
+        // Insert into rider_feedback
+        const riderId = booking.rider_id || rider_feedback.rider_id;
+        if (riderId) {
+            const riderFeedbackPayload = {
+                booking_id: booking.id,
+                rider_id: riderId,
+                rating: rider_feedback.rating,
+                review_tags: rider_feedback.review_tags || []
+            };
 
-        res.json({ message: 'Feedback submitted successfully', booking: data });
+            const { error: rfError } = await supabase.from('rider_feedback').insert([riderFeedbackPayload]);
+            if (rfError) throw rfError;
+        }
+
+        res.json({ message: 'Feedback submitted successfully' });
     } catch (error) {
         console.error('Submit Feedback Error:', error.message);
         res.status(500).json({ error: 'Internal server error' });

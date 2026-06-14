@@ -1,20 +1,103 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import BottomNavbar from '../../shared/navigation/BottomNavbar';
-import { defaultFaqs } from '../../shared/constants/faqs';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
 const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/admin`;
 
+const Colors = {
+  blue: '#3878C2',
+  blueMuted: '#6B7C93',
+  sky: '#63BCE6',
+  skyFaint: 'rgba(99, 188, 230, 0.12)',
+  skyBd: 'rgba(99, 188, 230, 0.25)',
+  green: '#4BAD40',
+  greenFaint: 'rgba(75, 173, 64, 0.12)',
+  yellow: '#ffde59',
+  gray: '#b4b4b4',
+  text: '#1F2937',
+  subtext: '#64748B',
+  white: '#FFFFFF',
+  danger: '#EB5757',
+  dangerFaint: 'rgba(235, 87, 87, 0.10)',
+  border: '#E5EAF2',
+  pageBg: '#F7FAFC',
+};
+
+const card = {
+  background: Colors.white,
+  border: `1px solid ${Colors.border}`,
+  borderRadius: '1rem',
+  boxShadow: '0 12px 32px rgba(15, 23, 42, 0.06)',
+};
+
+const typography = {
+  h1: {
+    fontSize: '2rem',
+    fontWeight: 900,
+    color: Colors.text,
+    letterSpacing: '-0.04em',
+    lineHeight: 1.15,
+    margin: 0,
+  },
+  h2: {
+    fontSize: '1.25rem',
+    fontWeight: 850,
+    color: Colors.text,
+    letterSpacing: '-0.025em',
+    margin: 0,
+  },
+  h3: {
+    fontSize: '1rem',
+    fontWeight: 800,
+    color: Colors.text,
+    letterSpacing: '-0.02em',
+    margin: 0,
+  },
+  body: {
+    fontSize: '0.95rem',
+    color: Colors.subtext,
+    lineHeight: 1.65,
+    margin: 0,
+  },
+  small: {
+    fontSize: '0.875rem',
+    color: Colors.subtext,
+    lineHeight: 1.55,
+    margin: 0,
+  },
+};
+
 const fallbackServices = [
-  { id: 'wash', name: 'Wash', currentPrice: 60.0, previousPrice: null },
-  { id: 'dry', name: 'Dry', currentPrice: 65.0, previousPrice: null },
-  { id: 'fold', name: 'Fold', currentPrice: 30.0, previousPrice: null },
+  {
+    id: 'fallback-full-service',
+    name: 'Full Service Laundry',
+    currentPrice: 220,
+    previousPrice: null,
+    estimatedHours: 24,
+  },
 ];
 
-const fallbackAddOns = [
-  { id: 'detergent', name: 'Detergent', currentPrice: 24.0, previousPrice: null },
-  { id: 'fabric-conditioner', name: 'Fabric Conditioner', currentPrice: 20.0, previousPrice: null },
+const defaultLoadOptions = [
+  {
+    id: 'regular',
+    label: 'Regular Light Mix',
+    sublabel: 'Up to 7.5 kg',
+    description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.',
+    price: 220,
+  },
+  {
+    id: 'heavy',
+    label: 'Heavy Load',
+    sublabel: 'Up to 5 kg',
+    description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.',
+    price: 220,
+  },
+  {
+    id: 'perPiece',
+    label: 'Per Piece',
+    sublabel: '₱220 per item',
+    description: 'Comforter, Duvet, Pillow, etc.',
+    price: 220,
+  },
 ];
 
 const fallbackSchedule = {
@@ -22,175 +105,465 @@ const fallbackSchedule = {
   closes: '22:00',
 };
 
-// Helper: get auth headers for API requests
-const getAuthHeaders = async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
-};
+const defaultFaqs = [
+  {
+    id: 'default-1',
+    question: 'What services does Herland Laundry offer?',
+    answer: 'Herland Laundry offers full service laundry including wash, dry, fold, detergent, and fabric conditioner.',
+  },
+  {
+    id: 'default-2',
+    question: 'How much is the laundry service?',
+    answer: 'The laundry service starts at ₱220 depending on the selected load type and quantity.',
+  },
+  {
+    id: 'default-3',
+    question: 'How long does laundry usually take?',
+    answer: 'Laundry is usually completed within the estimated service hours shown in the service details.',
+  },
+];
+
+function formatCurrency(value) {
+  const number = Number(value || 0);
+
+  return `₱${number.toLocaleString('en-PH', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function normalizeItem(item) {
+  return {
+    id: item.id,
+    name: item.name || '',
+    currentPrice: Number(item.currentPrice ?? item.current_price ?? 0),
+    previousPrice:
+      item.previousPrice !== undefined
+        ? item.previousPrice
+        : item.previous_price !== undefined
+          ? item.previous_price
+          : null,
+    estimatedHours: Number(item.estimatedHours ?? item.estimated_hours ?? 0),
+  };
+}
+
+function normalizeSchedule(schedule) {
+  return {
+    opens: schedule?.opens || fallbackSchedule.opens,
+    closes: schedule?.closes || fallbackSchedule.closes,
+    previousOpens: schedule?.previousOpens ?? schedule?.previous_opens ?? null,
+    previousCloses: schedule?.previousCloses ?? schedule?.previous_closes ?? null,
+  };
+}
+
+function SectionLabel({ children }) {
+  return (
+    <div className="mb-2">
+      <p
+        style={{
+          fontSize: '0.6875rem',
+          fontWeight: 800,
+          letterSpacing: '0.09em',
+          textTransform: 'uppercase',
+          color: Colors.blueMuted,
+          marginBottom: 10,
+        }}
+      >
+        {children}
+      </p>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <span
+        style={{
+          display: 'block',
+          fontSize: '0.78rem',
+          fontWeight: 800,
+          color: Colors.blueMuted,
+          marginBottom: 7,
+        }}
+      >
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function Modal({ title, children, onClose }) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 60,
+        background: 'rgba(15, 23, 42, 0.38)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          ...card,
+          width: 'min(520px, 100%)',
+          padding: '1.5rem',
+          boxShadow: '0 24px 80px rgba(15, 23, 42, 0.22)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+            marginBottom: 18,
+          }}
+        >
+          <h2 style={typography.h2}>{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              border: 'none',
+              background: Colors.skyFaint,
+              color: Colors.blue,
+              width: 34,
+              height: 34,
+              borderRadius: 999,
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function ManageServices() {
-  const openTimeRef = useRef(null);
-  const closeTimeRef = useRef(null);
-  const navigate = useNavigate();
   const [services, setServices] = useState(fallbackServices);
-  const [addOns, setAddOns] = useState(fallbackAddOns);
+  const [loadOptions, setLoadOptions] = useState(defaultLoadOptions);
   const [schedule, setSchedule] = useState(fallbackSchedule);
   const [previousSchedule, setPreviousSchedule] = useState(null);
-  const [history, setHistory] = useState([]);
   const [faqs, setFaqs] = useState(defaultFaqs);
+
+  const [loadEnabled, setLoadEnabled] = useState({
+    regular: true,
+    heavy: true,
+    perPiece: true,
+  });
+
+  const [serviceDraft, setServiceDraft] = useState({
+    name: '',
+    currentPrice: '',
+    estimatedHours: '',
+  });
+
+  const [faqDraft, setFaqDraft] = useState({
+    question: '',
+    answer: '',
+  });
+
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
+  const [history, setHistory] = useState([]);
 
-  // Fetch services, add-ons, schedule from backend
-  const fetchServices = useCallback(async () => {
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editType, setEditType] = useState('');
+  const [editItem, setEditItem] = useState(null);
+
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const [editingFaqId, setEditingFaqId] = useState(null);
+
+  const openTimeRef = useRef(null);
+  const closeTimeRef = useRef(null);
+
+  const hasPreviousSchedule = useMemo(() => {
+    return Boolean(previousSchedule?.opens && previousSchedule?.closes);
+  }, [previousSchedule]);
+
+  const getAuthHeaders = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const token = session?.access_token;
+
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const addHistory = (message, details = '') => {
+    const now = new Date();
+
+    const newLog = {
+      id: `${now.getTime()}-${Math.random()}`,
+      message,
+      details,
+      formattedDate: now.toLocaleDateString('en-PH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }),
+      formattedTime: now.toLocaleTimeString('en-PH', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    };
+
+    setHistory((prev) => [newLog, ...prev]);
+  };
+
+  const showSuccess = (message) => {
+    setSuccessMessage(message);
+    setShowSuccessModal(true);
+  };
+
+  const fetchServicesData = async () => {
     try {
       setLoading(true);
       setFetchError('');
-      const authHeaders = await getAuthHeaders();
 
-      // Fetch services + add-ons + schedule
-      const servicesRes = await fetch(`${API_BASE}/services`, { headers: authHeaders });
-      if (servicesRes.ok) {
-        const data = await servicesRes.json();
-        if (data.services) setServices(data.services);
-        if (data.addOns) setAddOns(data.addOns);
-        if (data.schedule) {
-          setSchedule({ opens: data.schedule.opens, closes: data.schedule.closes });
-          if (data.schedule.previousOpens || data.schedule.previousCloses) {
-            setPreviousSchedule({
-              opens: data.schedule.previousOpens || data.schedule.opens,
-              closes: data.schedule.previousCloses || data.schedule.closes,
-            });
-          }
-        }
-      } else {
-        setFetchError('Could not load services from server. Showing local data.');
+      const headers = await getAuthHeaders();
+
+      const [servicesResponse, faqsResponse] = await Promise.all([
+        fetch(`${API_BASE}/services`, { headers }),
+        fetch(`${API_BASE}/services/faqs`, { headers }),
+      ]);
+
+      if (!servicesResponse.ok) {
+        throw new Error('Unable to load services.');
       }
 
-      // Fetch FAQs
-      const faqsRes = await fetch(`${API_BASE}/services/faqs`, { headers: authHeaders });
-      if (faqsRes.ok) {
-        const faqData = await faqsRes.json();
-        if (faqData.length > 0) setFaqs(faqData);
+      const servicesData = await servicesResponse.json();
+
+      const incomingServices = Array.isArray(servicesData.services)
+        ? servicesData.services.map(normalizeItem)
+        : fallbackServices;
+
+      const incomingLoadOptions = Array.isArray(servicesData.loadOptions) && servicesData.loadOptions.length > 0
+        ? servicesData.loadOptions
+        : defaultLoadOptions;
+
+      const incomingSchedule = normalizeSchedule(servicesData.schedule);
+
+      setServices(incomingServices.length ? incomingServices : fallbackServices);
+      setLoadOptions(incomingLoadOptions);
+      setSchedule({
+        opens: incomingSchedule.opens,
+        closes: incomingSchedule.closes,
+      });
+
+      if (incomingSchedule.previousOpens && incomingSchedule.previousCloses) {
+        setPreviousSchedule({
+          opens: incomingSchedule.previousOpens,
+          closes: incomingSchedule.previousCloses,
+        });
+      }
+
+      if (faqsResponse.ok) {
+        const faqsData = await faqsResponse.json();
+
+        if (Array.isArray(faqsData) && faqsData.length) {
+          setFaqs(faqsData);
+        }
       }
     } catch (error) {
-      console.error('Error fetching services:', error);
-      setFetchError('Could not connect to server. Showing local data.');
+      setFetchError(error.message || 'Something went wrong while loading services.');
+      setServices(fallbackServices);
+      setSchedule(fallbackSchedule);
+      setFaqs(defaultFaqs);
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    fetchServices();
-  }, [fetchServices]);
-  const [faqDraft, setFaqDraft] = useState({ question: '', answer: '' });
-  const [editingFaqId, setEditingFaqId] = useState(null);
-  const [selectedTermsFile, setSelectedTermsFile] = useState(null);
-  const [termsDocument, setTermsDocument] = useState(null);
-  const [serviceDraft, setServiceDraft] = useState({ name: '', currentPrice: '', estimatedHours: '' });
-  const [addOnDraft, setAddOnDraft] = useState({ name: '', currentPrice: '', estimatedHours: '' });
-  const [editItem, setEditItem] = useState({ name: '', currentPrice: 0, estimatedHours: 0 });
+    fetchServicesData();
+  }, []);
 
-  // UI State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editType, setEditType] = useState(null);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState(null);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const handleAddItem = async (type) => {
+    const draft = serviceDraft;
+    const name = draft.name.trim();
+    const price = Number(draft.currentPrice);
+    const hours = Number(draft.estimatedHours);
 
-  const handleEditClick = (type, item = null) => {
+    if (!name || Number.isNaN(price) || price < 0 || Number.isNaN(hours) || hours < 0) {
+      setFetchError('Please enter a valid name, price, and estimated hours.');
+      return;
+    }
+
+    try {
+      setFetchError('');
+
+      const headers = await getAuthHeaders();
+
+      const response = await fetch(`${API_BASE}/services/items`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type,
+          name,
+          currentPrice: price,
+          estimatedHours: hours,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to add service.');
+      }
+
+      const createdItem = normalizeItem(await response.json());
+
+      setServices((prev) => [...prev, createdItem]);
+      setServiceDraft({
+        name: '',
+        currentPrice: '',
+        estimatedHours: '',
+      });
+
+      addHistory('Service added', `${name} was added with price ${formatCurrency(price)}.`);
+      showSuccess('Service added successfully.');
+    } catch (error) {
+      setFetchError(error.message || 'Unable to add item.');
+    }
+  };
+
+  const openEditItemModal = (type, item) => {
     setEditType(type);
-    setEditItem(type === 'service' || type === 'addon' ? { ...item } : { ...schedule });
+
+    if (type === 'load') {
+      setEditItem({
+        id: item.id,
+        oldId: item.id,
+        label: item.label,
+        sublabel: item.sublabel,
+        description: item.description,
+        price: Number(item.price || 0),
+      });
+    } else {
+      setEditItem({
+        ...item,
+        currentPrice: Number(item.currentPrice || 0),
+        estimatedHours: Number(item.estimatedHours || 0),
+      });
+    }
+
     setIsEditModalOpen(true);
   };
 
-  const handleConfirmSave = () => {
-    setIsEditModalOpen(false);
-    setShowConfirmModal(true);
+  const openEditScheduleModal = () => {
+    setEditType('schedule');
+    setEditItem({
+      opens: schedule.opens,
+      closes: schedule.closes,
+    });
+    setIsEditModalOpen(true);
   };
 
-  const handleFinalSave = async () => {
-    const timestamp = new Date();
-    const formattedDate = timestamp.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    const formattedTime = timestamp.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditType('');
+    setEditItem(null);
+  };
 
-    if (editType === 'service' || editType === 'addon') {
-      const updatedPrice = Number(editItem.currentPrice);
-      if (Number.isNaN(updatedPrice)) {
-        setShowConfirmModal(false);
+  const handleSaveEdit = async () => {
+    if (!editItem) return;
+
+    try {
+      setFetchError('');
+
+      if (editType === 'load') {
+        const updatedLoad = {
+          id: editItem.id.trim(),
+          label: editItem.label.trim(),
+          sublabel: editItem.sublabel.trim(),
+          description: editItem.description.trim(),
+          price: Number(editItem.price),
+        };
+
+        if (
+          !updatedLoad.id ||
+          !updatedLoad.label ||
+          !updatedLoad.sublabel ||
+          !updatedLoad.description ||
+          Number.isNaN(updatedLoad.price) ||
+          updatedLoad.price < 0
+        ) {
+          setFetchError('Please enter a valid load type ID, label, sublabel, description, and price.');
+          return;
+        }
+
+        const headers = await getAuthHeaders();
+
+        const response = await fetch(`${API_BASE}/services/items/${updatedLoad.id}`, {
+          method: 'PUT',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            currentPrice: Number(updatedLoad.price),
+            type: 'load',
+            label: updatedLoad.label,
+            sublabel: updatedLoad.sublabel,
+            description: updatedLoad.description,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Unable to update load type.');
+        }
+
+        setLoadOptions((prev) =>
+          prev.map((item) => (item.id === editItem.oldId ? updatedLoad : item))
+        );
+
+        if (editItem.oldId !== updatedLoad.id) {
+          setLoadEnabled((prev) => {
+            const next = { ...prev, [updatedLoad.id]: prev[editItem.oldId] ?? true };
+            delete next[editItem.oldId];
+            return next;
+          });
+        }
+
+        addHistory('Load type updated', `${updatedLoad.label} was updated.`);
+        showSuccess('Load type updated successfully.');
+        closeEditModal();
         return;
       }
 
-      const setCollection = editType === 'service' ? setServices : setAddOns;
-      const label = editType === 'service' ? 'Service' : 'Add-On';
-      let oldPrice = null;
+      const headers = await getAuthHeaders();
 
-      setCollection((prev) =>
-        prev.map((s) => {
-          if (s.id === editItem.id) {
-            oldPrice = s.currentPrice;
-            if (s.currentPrice !== updatedPrice) {
-              const newLog = {
-                id: Date.now(),
-                timestamp: `${formattedDate} at ${formattedTime}`,
-                message: `Updated ${s.name} ${label} Price`,
-                details: `Changed from ₱${s.currentPrice.toFixed(2)} to ₱${updatedPrice.toFixed(2)}`,
-              };
-              setHistory((prev) => [newLog, ...prev]);
-            }
-            return { ...editItem, currentPrice: updatedPrice, previousPrice: s.currentPrice };
-          }
-          return s;
-        })
-      );
-
-      // Persist to backend
-      try {
-        const authHeaders = await getAuthHeaders();
-        await fetch(`${API_BASE}/services/items/${editItem.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({
-            currentPrice: editItem.currentPrice,
-            previousPrice: oldPrice,
-            estimatedHours: editItem.estimatedHours,
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to persist price/hours update:', error);
-      }
-    } else {
-      if (schedule.opens !== editItem.opens || schedule.closes !== editItem.closes) {
-        const newLog = {
-          id: Date.now(),
-          timestamp: `${formattedDate} at ${formattedTime}`,
-          message: 'Updated Schedule',
-          details: `Opens: ${schedule.opens} → ${editItem.opens}, Closes: ${schedule.closes} → ${editItem.closes}`,
+      if (editType === 'schedule') {
+        const prevSchedule = {
+          opens: schedule.opens,
+          closes: schedule.closes,
         };
-        setHistory((prev) => [newLog, ...prev]);
-        setPreviousSchedule({ ...schedule });
-      }
-      const prevSchedule = { ...schedule };
-      setSchedule({ ...editItem });
 
-      // Persist schedule to backend
-      try {
-        const authHeaders = await getAuthHeaders();
-        await fetch(`${API_BASE}/services/schedule`, {
+        const response = await fetch(`${API_BASE}/services/schedule`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
             opens: editItem.opens,
             closes: editItem.closes,
@@ -198,1061 +571,1182 @@ export default function ManageServices() {
             previousCloses: prevSchedule.closes,
           }),
         });
-      } catch (error) {
-        console.error('Failed to persist schedule update:', error);
+
+        if (!response.ok) {
+          throw new Error('Unable to update shop schedule.');
+        }
+
+        setPreviousSchedule(prevSchedule);
+        setSchedule({
+          opens: editItem.opens,
+          closes: editItem.closes,
+        });
+
+        addHistory(
+          'Shop schedule updated',
+          `Schedule changed from ${prevSchedule.opens} - ${prevSchedule.closes} to ${editItem.opens} - ${editItem.closes}.`
+        );
+
+        showSuccess('Shop schedule updated successfully.');
+        closeEditModal();
+        return;
       }
-    }
-    setShowConfirmModal(false);
-    setShowSuccessModal(true);
-    setTimeout(() => setShowSuccessModal(false), 2000);
-  };
 
-  const handleRevert = async (type, item = null) => {
-    const timestamp = new Date();
-    const formattedDate = timestamp.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    const formattedTime = timestamp.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
+      const oldItem = services.find((item) => item.id === editItem.id);
+      const oldPrice = Number(oldItem?.currentPrice || 0);
 
-    if (type === 'service' || type === 'addon') {
-      if (item.previousPrice === null) return;
+      const response = await fetch(`${API_BASE}/services/items/${editItem.id}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentPrice: Number(editItem.currentPrice),
+          previousPrice: oldPrice,
+          estimatedHours: Number(editItem.estimatedHours),
+        }),
+      });
 
-      const setCollection = type === 'service' ? setServices : setAddOns;
-      const label = type === 'service' ? 'Service' : 'Add-On';
+      if (!response.ok) {
+        throw new Error('Unable to update service.');
+      }
 
-      const newLog = {
-        id: Date.now(),
-        timestamp: `${formattedDate} at ${formattedTime}`,
-        message: `Reverted ${item.name} ${label} Price`,
-        details: `Restored price to ₱${item.previousPrice.toFixed(
-          2
-        )} (was ₱${item.currentPrice.toFixed(2)})`,
+      const updatedItem = {
+        ...editItem,
+        currentPrice: Number(editItem.currentPrice),
+        previousPrice: oldPrice,
+        estimatedHours: Number(editItem.estimatedHours),
       };
-      setHistory((prev) => [newLog, ...prev]);
 
-      setCollection((prev) =>
-        prev.map((s) => {
-          if (s.id === item.id) {
-            return {
-              ...s,
-              currentPrice: s.previousPrice,
-              previousPrice: s.currentPrice,
-            };
-          }
-          return s;
-        })
+      setServices((prev) => prev.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+
+      addHistory(
+        'Service updated',
+        `${updatedItem.name} changed from ${formatCurrency(oldPrice)} to ${formatCurrency(updatedItem.currentPrice)}.`
       );
 
-      // Persist revert to backend
-      try {
-        const authHeaders = await getAuthHeaders();
-        await fetch(`${API_BASE}/services/items/${item.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({ currentPrice: item.previousPrice, previousPrice: item.currentPrice }),
-        });
-      } catch (error) {
-        console.error('Failed to persist revert:', error);
-      }
-    } else if (type === 'schedule') {
-      if (!previousSchedule) return;
-
-      const newLog = {
-        id: Date.now(),
-        timestamp: `${formattedDate} at ${formattedTime}`,
-        message: 'Reverted Schedule',
-        details: `Restored to ${previousSchedule.opens} - ${previousSchedule.closes} (was ${schedule.opens} - ${schedule.closes})`,
-      };
-      setHistory((prev) => [newLog, ...prev]);
-
-      const oldSchedule = { ...schedule };
-      setSchedule({ ...previousSchedule });
-      setPreviousSchedule({ ...schedule });
-
-      // Persist schedule revert to backend
-      try {
-        const authHeaders = await getAuthHeaders();
-        await fetch(`${API_BASE}/services/schedule`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({
-            opens: previousSchedule.opens,
-            closes: previousSchedule.closes,
-            previousOpens: oldSchedule.opens,
-            previousCloses: oldSchedule.closes,
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to persist schedule revert:', error);
-      }
-    }
-    setShowSuccessModal(true);
-    setTimeout(() => setShowSuccessModal(false), 1500);
-  };
-
-  const handleItemDraftChange = (type, field, value) => {
-    if (type === 'service') {
-      setServiceDraft((prev) => ({ ...prev, [field]: value }));
-      return;
-    }
-
-    setAddOnDraft((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleAddItem = async (type) => {
-    const draft = type === 'service' ? serviceDraft : addOnDraft;
-    const setCollection = type === 'service' ? setServices : setAddOns;
-    const setDraft = type === 'service' ? setServiceDraft : setAddOnDraft;
-    const label = type === 'service' ? 'Service' : 'Add-On';
-    const name = draft.name.trim();
-    const price = Number(draft.currentPrice);
-    const hours = Number(draft.estimatedHours || 0);
-
-    if (!name || Number.isNaN(price) || price < 0) return;
-
-    const timestamp = new Date();
-    const formattedDate = timestamp.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    const formattedTime = timestamp.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-
-    // Persist to backend first to get real ID
-    let newId = `${type}-${Date.now()}`;
-    try {
-      const authHeaders = await getAuthHeaders();
-      const response = await fetch(`${API_BASE}/services/items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ type, name, currentPrice: price, estimatedHours: hours }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.id) newId = data.id;
-      }
+      showSuccess('Service updated successfully.');
+      closeEditModal();
     } catch (error) {
-      console.error('Failed to persist new item:', error);
+      setFetchError(error.message || 'Unable to save changes.');
     }
-
-    setCollection((prev) => [
-      ...prev,
-      {
-        id: newId,
-        name,
-        currentPrice: price,
-        previousPrice: null,
-        estimatedHours: hours,
-      },
-    ]);
-
-    setHistory((prev) => [
-      {
-        id: Date.now(),
-        timestamp: `${formattedDate} at ${formattedTime}`,
-        message: `Added ${name} ${label}`,
-        details: `Initial price set to ₱${price.toFixed(2)}${hours > 0 ? `, est. ${hours} hrs` : ''}`,
-      },
-      ...prev,
-    ]);
-
-    setDraft({ name: '', currentPrice: '', estimatedHours: '' });
-    setShowSuccessModal(true);
-    setTimeout(() => setShowSuccessModal(false), 1500);
   };
 
-  const handleDeleteItem = (type, item) => {
-    setPendingDelete({ type, item });
-    setShowDeleteConfirmModal(true);
+  const handleRevertSchedule = async () => {
+    if (!hasPreviousSchedule) return;
+
+    try {
+      setFetchError('');
+      const headers = await getAuthHeaders();
+
+      const oldSchedule = {
+        opens: schedule.opens,
+        closes: schedule.closes,
+      };
+
+      const response = await fetch(`${API_BASE}/services/schedule`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          opens: previousSchedule.opens,
+          closes: previousSchedule.closes,
+          previousOpens: oldSchedule.opens,
+          previousCloses: oldSchedule.closes,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to revert schedule.');
+      }
+
+      setSchedule({
+        opens: previousSchedule.opens,
+        closes: previousSchedule.closes,
+      });
+
+      setPreviousSchedule(oldSchedule);
+
+      addHistory('Shop schedule reverted', `Schedule reverted to ${previousSchedule.opens} - ${previousSchedule.closes}.`);
+      showSuccess('Shop schedule reverted successfully.');
+    } catch (error) {
+      setFetchError(error.message || 'Unable to revert schedule.');
+    }
   };
 
-  const handleFinalDelete = async () => {
+  const closeDeleteModal = () => {
+    setPendingDelete(null);
+    setShowDeleteConfirmModal(false);
+  };
+
+  const handleDeleteItem = async () => {
     if (!pendingDelete) return;
 
-    const { type, item } = pendingDelete;
-    const setCollection = type === 'service' ? setServices : setAddOns;
-    const label = type === 'service' ? 'Service' : 'Add-On';
-    const timestamp = new Date();
-    const formattedDate = timestamp.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    const formattedTime = timestamp.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-
-    setCollection((prev) => prev.filter((entry) => entry.id !== item.id));
-
-    setHistory((prev) => [
-      {
-        id: Date.now(),
-        timestamp: `${formattedDate} at ${formattedTime}`,
-        message: `Deleted ${item.name} ${label}`,
-        details: `Removed item priced at ₱${item.currentPrice.toFixed(2)}`,
-      },
-      ...prev,
-    ]);
-
-    // Persist deletion to backend
     try {
-      const authHeaders = await getAuthHeaders();
-      await fetch(`${API_BASE}/services/items/${item.id}`, {
+      setFetchError('');
+      const headers = await getAuthHeaders();
+
+      const response = await fetch(`${API_BASE}/services/items/${pendingDelete.item.id}`, {
         method: 'DELETE',
-        headers: authHeaders,
+        headers,
       });
+
+      if (!response.ok) {
+        throw new Error('Unable to delete service.');
+      }
+
+      setServices((prev) => prev.filter((item) => item.id !== pendingDelete.item.id));
+      addHistory('Service deleted', `${pendingDelete.item.name} was deleted.`);
+      showSuccess('Service deleted successfully.');
+      closeDeleteModal();
     } catch (error) {
-      console.error('Failed to persist deletion:', error);
+      setFetchError(error.message || 'Unable to delete item.');
     }
-
-    setShowDeleteConfirmModal(false);
-    setPendingDelete(null);
-    setShowSuccessModal(true);
-    setTimeout(() => setShowSuccessModal(false), 1500);
-  };
-
-  const handleFaqInputChange = (field, value) => {
-    setFaqDraft((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const resetFaqForm = () => {
-    setFaqDraft({ question: '', answer: '' });
-    setEditingFaqId(null);
   };
 
   const handleSaveFaq = async () => {
     const question = faqDraft.question.trim();
     const answer = faqDraft.answer.trim();
 
-    if (!question || !answer) return;
+    if (!question || !answer) {
+      setFetchError('Please enter both FAQ question and answer.');
+      return;
+    }
 
     try {
-      const isDefaultFaq = editingFaqId && String(editingFaqId).startsWith('faq-');
-      const authHeaders = await getAuthHeaders();
+      setFetchError('');
+      const isDefaultFaq = String(editingFaqId || '').startsWith('default-');
+      const headers = await getAuthHeaders();
+
       const response = await fetch(`${API_BASE}/services/faqs`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          id: isDefaultFaq ? undefined : (editingFaqId || undefined),
+          id: isDefaultFaq ? undefined : editingFaqId || undefined,
           question,
           answer,
         }),
       });
 
-      if (editingFaqId) {
-        if (isDefaultFaq) {
-          let newId = editingFaqId;
-          if (response.ok) {
-            const data = await response.json();
-            if (data.id) newId = data.id;
-          }
-          setFaqs((prev) =>
-            prev.map((faq) =>
-              faq.id === editingFaqId
-                ? { ...faq, id: newId, question, answer }
-                : faq
-            )
-          );
-        } else {
-          setFaqs((prev) =>
-            prev.map((faq) =>
-              faq.id === editingFaqId
-                ? {
-                    ...faq,
-                    question,
-                    answer,
-                  }
-                : faq
-            )
-          );
-        }
-      } else {
-        let newId = `faq-${Date.now()}`;
-        if (response.ok) {
-          const data = await response.json();
-          if (data.id) newId = data.id;
-        }
-        setFaqs((prev) => [
-          ...prev,
-          {
-            id: newId,
-            question,
-            answer,
-          },
-        ]);
+      if (!response.ok) {
+        throw new Error('Unable to save FAQ.');
       }
-    } catch (error) {
-      console.error('Failed to persist FAQ:', error);
-      // Still update local state as fallback
-      if (editingFaqId) {
-        setFaqs((prev) =>
-          prev.map((faq) =>
-            faq.id === editingFaqId ? { ...faq, question, answer } : faq
-          )
-        );
-      } else {
-        setFaqs((prev) => [...prev, { id: `faq-${Date.now()}`, question, answer }]);
-      }
-    }
 
-    resetFaqForm();
+      const savedFaq = await response.json();
+      const normalizedFaq = {
+        id: savedFaq.id || editingFaqId || `${Date.now()}`,
+        question: savedFaq.question || question,
+        answer: savedFaq.answer || answer,
+      };
+
+      if (editingFaqId) {
+        setFaqs((prev) => prev.map((faq) => (faq.id === editingFaqId ? normalizedFaq : faq)));
+        addHistory('FAQ updated', question);
+        showSuccess('FAQ updated successfully.');
+      } else {
+        setFaqs((prev) => [...prev, normalizedFaq]);
+        addHistory('FAQ added', question);
+        showSuccess('FAQ added successfully.');
+      }
+
+      setFaqDraft({
+        question: '',
+        answer: '',
+      });
+      setEditingFaqId(null);
+    } catch (error) {
+      setFetchError(error.message || 'Unable to save FAQ.');
+    }
   };
 
   const handleEditFaq = (faq) => {
     setEditingFaqId(faq.id);
-    setFaqDraft({ question: faq.question, answer: faq.answer });
+    setFaqDraft({
+      question: faq.question,
+      answer: faq.answer,
+    });
   };
 
-  const handleDeleteFaq = async (faqId) => {
-    setFaqs((prev) => prev.filter((faq) => faq.id !== faqId));
-    if (editingFaqId === faqId) {
-      resetFaqForm();
-    }
+  const handleCancelFaqEdit = () => {
+    setEditingFaqId(null);
+    setFaqDraft({
+      question: '',
+      answer: '',
+    });
+  };
 
-    // Persist FAQ deletion to backend
+  const handleDeleteFaq = async (faq) => {
     try {
-      const authHeaders = await getAuthHeaders();
-      await fetch(`${API_BASE}/services/faqs/${faqId}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-      });
-    } catch (error) {
-      console.error('Failed to persist FAQ deletion:', error);
-    }
-  };
+      setFetchError('');
 
-  const handleMoveFaq = (index, direction) => {
-    setFaqs((prev) => {
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (!String(faq.id).startsWith('default-')) {
+        const headers = await getAuthHeaders();
 
-      if (targetIndex < 0 || targetIndex >= prev.length) {
-        return prev;
+        const response = await fetch(`${API_BASE}/services/faqs/${faq.id}`, {
+          method: 'DELETE',
+          headers,
+        });
+
+        if (!response.ok) {
+          throw new Error('Unable to delete FAQ.');
+        }
       }
 
-      const reordered = [...prev];
-      const [movedItem] = reordered.splice(index, 1);
-      reordered.splice(targetIndex, 0, movedItem);
+      setFaqs((prev) => prev.filter((item) => item.id !== faq.id));
+      addHistory('FAQ deleted', faq.question);
+      showSuccess('FAQ deleted successfully.');
+    } catch (error) {
+      setFetchError(error.message || 'Unable to delete FAQ.');
+    }
+  };
 
-      // Persist reorder to backend
-      const orderedIds = reordered.map((faq) => faq.id);
-      getAuthHeaders().then((authHeaders) => {
-        fetch(`${API_BASE}/services/faqs/reorder`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({ orderedIds }),
-        }).catch((err) => console.error('Failed to persist FAQ reorder:', err));
+  const handleMoveFaq = async (index, direction) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+
+    if (targetIndex < 0 || targetIndex >= faqs.length) return;
+
+    const reordered = [...faqs];
+    const [movedItem] = reordered.splice(index, 1);
+    reordered.splice(targetIndex, 0, movedItem);
+
+    setFaqs(reordered);
+
+    try {
+      const orderedIds = reordered
+        .filter((faq) => !String(faq.id).startsWith('default-'))
+        .map((faq) => faq.id);
+
+      if (!orderedIds.length) return;
+
+      const headers = await getAuthHeaders();
+
+      const response = await fetch(`${API_BASE}/services/faqs/reorder`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ orderedIds }),
       });
 
-      return reordered;
-    });
-  };
+      if (!response.ok) {
+        throw new Error('Unable to reorder FAQs.');
+      }
 
-  const handleTermsFileChange = (event) => {
-    const selected = event.target.files?.[0] || null;
-    setSelectedTermsFile(selected);
-  };
-
-  const handleUploadTerms = () => {
-    if (!selectedTermsFile) return;
-
-    setTermsDocument({
-      name: selectedTermsFile.name,
-      size: selectedTermsFile.size,
-      uploadedAt: new Date().toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      }),
-    });
-
-    setSelectedTermsFile(null);
+      addHistory('FAQs reordered', 'FAQ display order was updated.');
+    } catch (error) {
+      setFetchError(error.message || 'Unable to reorder FAQs.');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-white px-4 py-6 sm:py-10">
-      <main className="mx-auto w-full max-w-2xl pb-24 md:max-w-5xl lg:max-w-6xl">
-        {loading && <p className="text-gray-500 mb-4">Loading services...</p>}
-        {fetchError && <p className="text-amber-600 text-sm mb-4">{fetchError}</p>}
-        <header className="mb-6 flex items-center gap-2 text-[#3878c2]">
+    <div
+      style={{
+        minHeight: '100%',
+        background: Colors.pageBg,
+        padding: '1.5rem',
+      }}
+    >
+      <div className="mb-8">
+        <h1 style={typography.h1}>Manage Services</h1>
+        <p style={{ ...typography.body, marginTop: '0.5rem' }}>
+          View and manage laundry services, load types, shop schedule, and FAQs.
+        </p>
+      </div>
+
+      {loading && (
+        <div
+          style={{
+            ...card,
+            padding: '1rem 1.25rem',
+            marginBottom: 20,
+            color: Colors.blue,
+            fontWeight: 700,
+          }}
+        >
+          Loading services...
+        </div>
+      )}
+
+      {fetchError && (
+        <div
+          style={{
+            padding: '0.9rem 1rem',
+            borderRadius: '0.875rem',
+            background: Colors.dangerFaint,
+            color: Colors.danger,
+            fontWeight: 700,
+            marginBottom: 20,
+            border: `1px solid rgba(235, 87, 87, 0.16)`,
+          }}
+        >
+          {fetchError}
+        </div>
+      )}
+
+      <SectionLabel>Service</SectionLabel>
+
+      <div
+        style={{
+          ...card,
+          borderLeft: `4px solid ${Colors.blue}`,
+          padding: '1.375rem 1.5rem',
+          marginBottom: 32,
+          position: 'relative',
+        }}
+      >
+        <div style={{ position: 'absolute', top: 16, right: 16 }}>
+          <span
+            style={{
+              padding: '3px 12px',
+              borderRadius: '2rem',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              background: Colors.greenFaint,
+              color: Colors.green,
+            }}
+          >
+            Active
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 24,
+            paddingRight: 80,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ flex: '1 1 340px' }}>
+            <h3 style={{ ...typography.h3, marginBottom: 4 }}>Full Service Laundry</h3>
+            <p style={{ ...typography.small, lineHeight: 1.6 }}>
+              Includes wash, dry, fold, detergent, and fabric conditioner.
+            </p>
+          </div>
+
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <p style={{ fontSize: '0.75rem', color: Colors.blueMuted, marginBottom: 2 }}>
+              Starting at
+            </p>
+            <p
+              style={{
+                fontSize: '1.875rem',
+                fontWeight: 900,
+                color: Colors.green,
+                letterSpacing: '-0.03em',
+                lineHeight: 1,
+                margin: 0,
+              }}
+            >
+              {formatCurrency(220)}
+            </p>
+            <p style={{ fontSize: '0.75rem', color: Colors.blueMuted, marginTop: 2 }}>
+              / load
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <SectionLabel>Services</SectionLabel>
+
+      <div
+        style={{
+          ...card,
+          padding: '1.25rem',
+          marginBottom: 32,
+        }}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Field label="Service Name">
+            <input
+              value={serviceDraft.name}
+              onChange={(event) =>
+                setServiceDraft((prev) => ({ ...prev, name: event.target.value }))
+              }
+              placeholder="Full Service Laundry"
+              style={{
+                width: '100%',
+                border: `1px solid ${Colors.border}`,
+                borderRadius: '0.75rem',
+                padding: '0.75rem 0.85rem',
+                outline: 'none',
+              }}
+            />
+          </Field>
+
+          <Field label="Current Price">
+            <input
+              type="number"
+              min="0"
+              value={serviceDraft.currentPrice}
+              onChange={(event) =>
+                setServiceDraft((prev) => ({ ...prev, currentPrice: event.target.value }))
+              }
+              placeholder="220"
+              style={{
+                width: '100%',
+                border: `1px solid ${Colors.border}`,
+                borderRadius: '0.75rem',
+                padding: '0.75rem 0.85rem',
+                outline: 'none',
+              }}
+            />
+          </Field>
+
+          <Field label="Estimated Hours">
+            <input
+              type="number"
+              min="0"
+              value={serviceDraft.estimatedHours}
+              onChange={(event) =>
+                setServiceDraft((prev) => ({ ...prev, estimatedHours: event.target.value }))
+              }
+              placeholder="24"
+              style={{
+                width: '100%',
+                border: `1px solid ${Colors.border}`,
+                borderRadius: '0.75rem',
+                padding: '0.75rem 0.85rem',
+                outline: 'none',
+              }}
+            />
+          </Field>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handleAddItem('service')}
+          style={{
+            marginTop: 14,
+            padding: '9px 22px',
+            borderRadius: '0.75rem',
+            background: Colors.blue,
+            color: Colors.white,
+            fontSize: '0.875rem',
+            fontWeight: 800,
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          Add Service
+        </button>
+      </div>
+
+      <SectionLabel>Load Types</SectionLabel>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5" style={{ marginBottom: 32 }}>
+        {loadOptions.map((opt) => {
+          const enabled = loadEnabled[opt.id];
+
+          return (
+            <div
+              key={opt.id}
+              style={{
+                ...card,
+                padding: '1.25rem 1.375rem',
+                position: 'relative',
+              }}
+            >
+              <div style={{ position: 'absolute', top: 14, right: 14 }}>
+                <span
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: '2rem',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    background: enabled ? Colors.greenFaint : 'rgba(200,200,200,0.2)',
+                    color: enabled ? Colors.green : Colors.blueMuted,
+                  }}
+                >
+                  {enabled ? 'Active' : 'Disabled'}
+                </span>
+              </div>
+
+              <div style={{ paddingRight: 70, marginBottom: 12 }}>
+                <h3 style={{ ...typography.h3, marginBottom: 2 }}>{opt.label}</h3>
+                <p
+                  style={{
+                    fontSize: '0.8125rem',
+                    color: Colors.blue,
+                    fontWeight: 600,
+                    marginBottom: 6,
+                  }}
+                >
+                  {opt.sublabel}
+                </p>
+                <p
+                  style={{
+                    fontSize: '0.875rem',
+                    fontWeight: 900,
+                    color: Colors.green,
+                    letterSpacing: '-0.02em',
+                    marginBottom: 6,
+                  }}
+                >
+                  {formatCurrency(opt.price)}
+                </p>
+                <p style={{ ...typography.small, lineHeight: 1.6 }}>{opt.description}</p>
+              </div>
+
+              <div style={{ height: 1, background: Colors.skyBd, margin: '12px 0' }} />
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => openEditItemModal('load', opt)}
+                  style={{
+                    flex: 1,
+                    padding: '7px 0',
+                    borderRadius: '0.625rem',
+                    background: Colors.skyFaint,
+                    color: Colors.blue,
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Edit
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLoadEnabled((prev) => ({
+                      ...prev,
+                      [opt.id]: !prev[opt.id],
+                    }))
+                  }
+                  style={{
+                    flex: 1,
+                    padding: '7px 0',
+                    borderRadius: '0.625rem',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: enabled ? Colors.dangerFaint : Colors.greenFaint,
+                    color: enabled ? Colors.danger : Colors.green,
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {enabled ? 'Disable' : 'Enable'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <SectionLabel>Shop Schedule</SectionLabel>
+
+      <div
+        style={{
+          ...card,
+          padding: '1.375rem 1.5rem',
+          marginBottom: 32,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 20,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <h3 style={{ ...typography.h3, marginBottom: 6 }}>Operating Hours</h3>
+            <p style={typography.small}>
+              Current schedule: <strong>{schedule.opens}</strong> to <strong>{schedule.closes}</strong>
+            </p>
+
+            {hasPreviousSchedule && (
+              <p style={{ ...typography.small, marginTop: 4 }}>
+                Previous schedule: <strong>{previousSchedule.opens}</strong> to{' '}
+                <strong>{previousSchedule.closes}</strong>
+              </p>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={openEditScheduleModal}
+              style={{
+                padding: '8px 22px',
+                borderRadius: '0.625rem',
+                background: Colors.skyFaint,
+                color: Colors.blue,
+                fontSize: '0.875rem',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Edit Schedule
+            </button>
+
+            <button
+              type="button"
+              disabled={!hasPreviousSchedule}
+              onClick={handleRevertSchedule}
+              style={{
+                padding: '8px 22px',
+                borderRadius: '0.625rem',
+                border: 'none',
+                cursor: hasPreviousSchedule ? 'pointer' : 'not-allowed',
+                background: hasPreviousSchedule ? Colors.greenFaint : 'rgba(180, 180, 180, 0.18)',
+                color: hasPreviousSchedule ? Colors.green : Colors.blueMuted,
+                fontSize: '0.875rem',
+                fontWeight: 700,
+              }}
+            >
+              Revert Schedule
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <SectionLabel>FAQs</SectionLabel>
+
+      <div
+        style={{
+          ...card,
+          padding: '1.25rem',
+          marginBottom: 20,
+        }}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Question">
+            <input
+              value={faqDraft.question}
+              onChange={(event) =>
+                setFaqDraft((prev) => ({ ...prev, question: event.target.value }))
+              }
+              placeholder="Enter FAQ question"
+              style={{
+                width: '100%',
+                border: `1px solid ${Colors.border}`,
+                borderRadius: '0.75rem',
+                padding: '0.75rem 0.85rem',
+                outline: 'none',
+              }}
+            />
+          </Field>
+
+          <Field label="Answer">
+            <input
+              value={faqDraft.answer}
+              onChange={(event) =>
+                setFaqDraft((prev) => ({ ...prev, answer: event.target.value }))
+              }
+              placeholder="Enter FAQ answer"
+              style={{
+                width: '100%',
+                border: `1px solid ${Colors.border}`,
+                borderRadius: '0.75rem',
+                padding: '0.75rem 0.85rem',
+                outline: 'none',
+              }}
+            />
+          </Field>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
           <button
             type="button"
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center"
-            aria-label="Go back"
+            onClick={handleSaveFaq}
+            style={{
+              padding: '9px 22px',
+              borderRadius: '0.75rem',
+              background: Colors.blue,
+              color: Colors.white,
+              fontSize: '0.875rem',
+              fontWeight: 800,
+              border: 'none',
+              cursor: 'pointer',
+            }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-            </svg>
+            {editingFaqId ? 'Update FAQ' : 'Add FAQ'}
           </button>
-          <h1 className="text-2xl font-semibold">Manage Services</h1>
-        </header>
 
-        {/* Services & Schedule */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {/* Services Section */}
-          <section className="rounded-2xl border border-[#3878c2]/20 bg-white p-5 shadow-sm">
-            <h2 className="mb-5 text-lg font-semibold text-[#3878c2]">Services</h2>
-            <div className="w-full">
-              <div className="mb-4 grid grid-cols-1 gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 sm:grid-cols-[1.6fr_1fr_auto]">
-                <input
-                  type="text"
-                  value={serviceDraft.name}
-                  onChange={(event) => handleItemDraftChange('service', 'name', event.target.value)}
-                  placeholder="Service name"
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={serviceDraft.currentPrice}
-                  onChange={(event) =>
-                    handleItemDraftChange('service', 'currentPrice', event.target.value)
-                  }
-                  placeholder="Price"
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleAddItem('service')}
-                  className="rounded-lg bg-[#3878c2] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
-                >
-                  Add Service
-                </button>
-              </div>
-
-              <div className="mb-4 flex items-center border-b border-gray-100 pb-3 text-[10px] sm:text-xs md:text-sm font-semibold text-[#374151] px-1">
-                <span className="flex-[1.5] text-left">Services</span>
-                <span className="flex-1 text-center sm:text-left px-1">Current Price</span>
-                <span className="flex-1 text-center sm:text-left px-1">Prev. Price</span>
-                <div className="w-24 sm:w-28 shrink-0"></div>
-              </div>
-              <div className="space-y-4">
-                {services.map((s) => (
-                  <div key={s.id} className="flex items-center rounded-xl border border-gray-100 p-2 sm:px-3 sm:py-3 gap-2">
-                    <span className="flex-[1.5] text-left text-xs sm:text-sm font-bold text-gray-800 truncate">
-                      {s.name}
-                    </span>
-                    <span className="flex-1 text-center sm:text-left text-xs sm:text-sm font-bold text-[#3878c2]">
-                      ₱{s.currentPrice.toFixed(2)}
-                    </span>
-                    <span className="flex-1 text-center sm:text-left text-[10px] sm:text-sm font-medium text-gray-400">
-                      {s.previousPrice ? `₱${s.previousPrice.toFixed(2)}` : '-'}
-                    </span>
-                    <div className="flex shrink-0 items-center justify-end gap-1 sm:gap-2 w-24 sm:w-28">
-                      <button
-                        onClick={() => handleEditClick('service', s)}
-                        className="rounded-lg p-1.5 text-gray-600 transition-all hover:bg-[#3878c2]/5 sm:p-2 sm:hover:bg-[#3878c2]/10"
-                        aria-label={`Edit ${s.name}`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.5}
-                          stroke="currentColor"
-                          className="size-4 sm:size-5"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleRevert('service', s)}
-                        disabled={s.previousPrice === null}
-                        className={`rounded-lg p-1.5 text-gray-600 transition-all hover:bg-[#3878c2]/5 sm:p-2 sm:hover:bg-[#3878c2]/10 ${
-                          s.previousPrice === null
-                            ? 'opacity-20 cursor-not-allowed'
-                            : 'opacity-100'
-                        }`}
-                        aria-label={`Revert ${s.name} price`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.5}
-                          stroke="currentColor"
-                          className="size-4 sm:size-5"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 0 0-3.7-3.7 48.678 48.678 0 0 0-7.324 0 4.006 4.006 0 0 0-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 0 0 3.7 3.7 48.656 48.656 0 0 0 7.324 0 4.006 4.006 0 0 0 3.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3-3 3"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteItem('service', s)}
-                        className="rounded-lg p-1.5 text-red-500 transition-all hover:bg-red-50 sm:p-2"
-                        aria-label={`Delete ${s.name}`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.5}
-                          stroke="currentColor"
-                          className="size-4 sm:size-5"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Add-Ons Section */}
-          <section className="rounded-2xl border border-[#3878c2]/20 bg-white p-5 shadow-sm">
-            <h2 className="mb-5 text-lg font-semibold text-[#3878c2]">Add-Ons</h2>
-            <div className="w-full">
-              <div className="mb-4 grid grid-cols-1 gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 sm:grid-cols-[1.6fr_1fr_auto]">
-                <input
-                  type="text"
-                  value={addOnDraft.name}
-                  onChange={(event) => handleItemDraftChange('addon', 'name', event.target.value)}
-                  placeholder="Add-on name"
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={addOnDraft.currentPrice}
-                  onChange={(event) =>
-                    handleItemDraftChange('addon', 'currentPrice', event.target.value)
-                  }
-                  placeholder="Price"
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleAddItem('addon')}
-                  className="rounded-lg bg-[#3878c2] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
-                >
-                  Add Add-On
-                </button>
-              </div>
-
-              <div className="mb-4 flex items-center border-b border-gray-100 pb-3 text-[10px] sm:text-xs md:text-sm font-semibold text-[#374151] px-1">
-                <span className="flex-[1.5] text-left">Add-On</span>
-                <span className="flex-1 text-center sm:text-left px-1">Current Price</span>
-                <span className="flex-1 text-center sm:text-left px-1">Prev. Price</span>
-                <div className="w-24 sm:w-28 shrink-0"></div>
-              </div>
-              <div className="space-y-4">
-                {addOns.map((item) => (
-                  <div key={item.id} className="flex items-center rounded-xl border border-gray-100 p-2 sm:px-3 sm:py-3 gap-2">
-                    <span className="flex-[1.5] text-left text-xs sm:text-sm font-bold text-gray-800 truncate">
-                      {item.name}
-                    </span>
-                    <span className="flex-1 text-center sm:text-left text-xs sm:text-sm font-bold text-[#3878c2]">
-                      ₱{item.currentPrice.toFixed(2)}
-                    </span>
-                    <span className="flex-1 text-center sm:text-left text-[10px] sm:text-sm font-medium text-gray-400">
-                      {item.previousPrice ? `₱${item.previousPrice.toFixed(2)}` : '-'}
-                    </span>
-                    <div className="flex shrink-0 items-center justify-end gap-1 sm:gap-2 w-24 sm:w-28">
-                      <button
-                        onClick={() => handleEditClick('addon', item)}
-                        className="rounded-lg p-1.5 text-gray-600 transition-all hover:bg-[#3878c2]/5 sm:p-2 sm:hover:bg-[#3878c2]/10"
-                        aria-label={`Edit ${item.name}`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.5}
-                          stroke="currentColor"
-                          className="size-4 sm:size-5"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleRevert('addon', item)}
-                        disabled={item.previousPrice === null}
-                        className={`rounded-lg p-1.5 text-gray-600 transition-all hover:bg-[#3878c2]/5 sm:p-2 sm:hover:bg-[#3878c2]/10 ${
-                          item.previousPrice === null
-                            ? 'opacity-20 cursor-not-allowed'
-                            : 'opacity-100'
-                        }`}
-                        aria-label={`Revert ${item.name} price`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.5}
-                          stroke="currentColor"
-                          className="size-4 sm:size-5"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 0 0-3.7-3.7 48.678 48.678 0 0 0-7.324 0 4.006 4.006 0 0 0-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 0 0 3.7 3.7 48.656 48.656 0 0 0 7.324 0 4.006 4.006 0 0 0 3.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3-3 3"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteItem('addon', item)}
-                        className="rounded-lg p-1.5 text-red-500 transition-all hover:bg-red-50 sm:p-2"
-                        aria-label={`Delete ${item.name}`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.5}
-                          stroke="currentColor"
-                          className="size-4 sm:size-5"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Schedule Section */}
-          <section className="rounded-2xl border border-[#3878c2]/20 bg-white p-5 shadow-sm">
-            <h2 className="mb-5 text-lg font-semibold text-[#3878c2]">Schedule</h2>
-            <div className="w-full">
-              <div className="mb-4 flex items-center border-b border-gray-100 pb-3 text-sm font-normal text-[#374151]">
-                <span className="flex-[2.25] text-left">Open</span>
-                <span className="flex-1 text-left">Close</span>
-                <div className="w-20"></div>
-              </div>
-              <div className="flex items-center rounded-xl border border-gray-100 px-3 py-3">
-                <span className="flex-[2.25] text-left text-sm font-semibold text-gray-800">
-                  {schedule.opens}
-                </span>
-                <span className="flex-1 text-left text-sm font-semibold text-gray-800">{schedule.closes}</span>
-                <div className="w-20 flex justify-end gap-3">
-                  <button
-                    onClick={() => handleEditClick('schedule')}
-                    className="rounded-xl p-2 text-gray-600 transition-all hover:bg-[#3878c2]/10"
-                    aria-label="Edit schedule"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="size-5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => handleRevert('schedule')}
-                    disabled={!previousSchedule}
-                    className={`rounded-xl p-2 text-gray-600 transition-all hover:bg-[#3878c2]/10 ${
-                      !previousSchedule ? 'opacity-20 cursor-not-allowed' : 'opacity-100'
-                    }`}
-                    aria-label="Revert schedule"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="size-5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 0 0-3.7-3.7 48.678 48.678 0 0 0-7.324 0 4.006 4.006 0 0 0-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 0 0 3.7 3.7 48.656 48.656 0 0 0 7.324 0 4.006 4.006 0 0 0 3.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3-3 3"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-          <section className="rounded-2xl border border-[#3878c2]/20 bg-white p-5 shadow-sm">
-            <h2 className="mb-5 text-lg font-semibold text-[#3878c2]">Manage FAQs</h2>
-
-            <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
-              <input
-                type="text"
-                value={faqDraft.question}
-                onChange={(event) => handleFaqInputChange('question', event.target.value)}
-                placeholder="FAQ question"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-              />
-              <textarea
-                value={faqDraft.answer}
-                onChange={(event) => handleFaqInputChange('answer', event.target.value)}
-                placeholder="FAQ answer"
-                rows={3}
-                className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleSaveFaq}
-                  className="rounded-lg bg-[#3878c2] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
-                >
-                  {editingFaqId ? 'Update FAQ' : 'Add FAQ'}
-                </button>
-                {editingFaqId && (
-                  <button
-                    onClick={resetFaqForm}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-100"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 max-h-64 space-y-3 overflow-y-auto pr-1">
-              {faqs.length > 0 ? (
-                faqs.map((faq, index) => (
-                  <div key={faq.id} className="rounded-xl border border-gray-100 p-3">
-                    <p className="text-sm font-semibold text-gray-800">{faq.question}</p>
-                    <p className="mt-1 text-xs text-gray-600">{faq.answer}</p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <button
-                        onClick={() => handleMoveFaq(index, 'up')}
-                        disabled={index === 0}
-                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
-                          index === 0
-                            ? 'cursor-not-allowed border-gray-100 text-gray-300'
-                            : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        Up
-                      </button>
-                      <button
-                        onClick={() => handleMoveFaq(index, 'down')}
-                        disabled={index === faqs.length - 1}
-                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
-                          index === faqs.length - 1
-                            ? 'cursor-not-allowed border-gray-100 text-gray-300'
-                            : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        Down
-                      </button>
-                      <button
-                        onClick={() => handleEditFaq(faq)}
-                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600 transition hover:bg-gray-50"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteFaq(faq.id)}
-                        className="rounded-lg border border-red-200 px-2.5 py-1 text-[11px] font-semibold text-red-500 transition hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-center text-xs italic text-gray-400">No FAQs yet.</p>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-[#3878c2]/20 bg-white p-5 shadow-sm">
-            <h2 className="mb-5 text-lg font-semibold text-[#3878c2]">Terms &amp; Conditions</h2>
-
-            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Upload file
-              </label>
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx,.txt"
-                onChange={handleTermsFileChange}
-                className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-[#3878c2] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:opacity-90"
-              />
-
-              {selectedTermsFile && (
-                <p className="mt-2 text-xs text-gray-600">
-                  Selected: <span className="font-semibold">{selectedTermsFile.name}</span>
-                </p>
-              )}
-
-              <button
-                onClick={handleUploadTerms}
-                className="mt-3 rounded-lg bg-[#3878c2] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
-              >
-                {termsDocument ? 'Replace Terms File' : 'Upload Terms File'}
-              </button>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-gray-100 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Current file</p>
-              {termsDocument ? (
-                <div className="mt-2 space-y-1">
-                  <p className="text-sm font-semibold text-gray-800">{termsDocument.name}</p>
-                  <p className="text-xs text-gray-500">
-                    Size: {(termsDocument.size / 1024).toFixed(1)} KB
-                  </p>
-                  <p className="text-xs text-gray-500">Last updated: {termsDocument.uploadedAt}</p>
-                </div>
-              ) : (
-                <p className="mt-2 text-xs italic text-gray-400">No terms file uploaded yet.</p>
-              )}
-            </div>
-          </section>
-        </div>
-
-        <section className="mt-6 rounded-2xl border border-[#3878c2]/20 bg-white p-5 shadow-sm">
-          <button
-            onClick={() => setIsHistoryOpen(!isHistoryOpen)}
-            className="flex items-center gap-2 text-sm font-semibold text-gray-700"
-          >
-            Edit History <span className="relative top-[-4px] text-xs text-[#3878c2]">{history.length}</span>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className={`h-4 w-4 transition-transform ${isHistoryOpen ? 'rotate-180' : ''}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+          {editingFaqId && (
+            <button
+              type="button"
+              onClick={handleCancelFaqEdit}
+              style={{
+                padding: '9px 22px',
+                borderRadius: '0.75rem',
+                background: Colors.skyFaint,
+                color: Colors.blue,
+                fontSize: '0.875rem',
+                fontWeight: 800,
+                border: 'none',
+                cursor: 'pointer',
+              }}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {isHistoryOpen && (
-            <div className="mt-4 max-h-60 overflow-y-auto rounded-xl bg-gray-50 p-4">
-              {history.length > 0 ? (
-                <div className="space-y-3">
-                  {history.map((log) => (
-                    <div key={log.id} className="text-left border-b border-gray-100 pb-2 last:border-0 last:pb-0">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-bold text-[#3878c2]">{log.message}</span>
-                        <span className="text-[10px] text-gray-400">{log.timestamp}</span>
-                      </div>
-                      <p className="text-xs text-gray-600">{log.details}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center text-xs text-gray-400 italic">No edit history found.</div>
-              )}
-            </div>
+              Cancel
+            </button>
           )}
-        </section>
+        </div>
+      </div>
 
-        {isEditModalOpen && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4">
-            <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
-              <h3 className="text-lg font-semibold text-[#3878c2]">
-                {editType === 'service' || editType === 'addon' ? `Edit ${editItem?.name} Price` : 'Edit Schedule'}
-              </h3>
-
-              {editType === 'service' || editType === 'addon' ? (
-                <>
-                  <div className="mt-4">
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Price</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={editItem?.currentPrice ?? 0}
-                      onChange={(event) =>
-                        setEditItem((prev) => ({ ...prev, currentPrice: Number(event.target.value) }))
-                      }
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-                    />
-                  </div>
-                  <div className="mt-4">
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Estimated Hours</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={editItem?.estimatedHours ?? 0}
-                      onChange={(event) =>
-                        setEditItem((prev) => ({ ...prev, estimatedHours: Number(event.target.value) }))
-                      }
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-                    />
-                  </div>
-                </>
-              ) : (
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Open</label>
-                    <div className="relative">
-                      <input
-                        ref={openTimeRef}
-                        type="time"
-                        value={editItem?.opens || ''}
-                        onChange={(event) =>
-                          setEditItem((prev) => ({ ...prev, opens: event.target.value }))
-                        }
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-10 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => openTimeRef.current?.showPicker()}
-                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-[#3878c2]"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Close</label>
-                    <div className="relative">
-                      <input
-                        ref={closeTimeRef}
-                        type="time"
-                        value={editItem?.closes || ''}
-                        onChange={(event) =>
-                          setEditItem((prev) => ({ ...prev, closes: event.target.value }))
-                        }
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-10 text-sm text-gray-700 focus:border-[#3878c2] focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => closeTimeRef.current?.showPicker()}
-                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-[#3878c2]"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-5 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmSave}
-                  className="rounded-lg bg-[#3878c2] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
-                >
-                  Save
-                </button>
+      <div style={{ display: 'grid', gap: 12, marginBottom: 32 }}>
+        {faqs.map((faq, index) => (
+          <div
+            key={faq.id}
+            style={{
+              ...card,
+              padding: '1.125rem 1.25rem',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 16,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ flex: '1 1 360px' }}>
+                <h3 style={{ ...typography.h3, marginBottom: 5 }}>{faq.question}</h3>
+                <p style={typography.small}>{faq.answer}</p>
               </div>
-            </div>
-          </div>
-        )}
 
-        {showConfirmModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-              <h3 className="text-base font-semibold text-gray-800">Confirm changes</h3>
-              <p className="mt-2 text-sm text-gray-600">Apply these updates?</p>
-              <div className="mt-4 flex justify-end gap-2">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  onClick={() => setShowConfirmModal(false)}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFinalSave}
-                  className="rounded-lg bg-[#3878c2] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
-                >
-                  Confirm
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showDeleteConfirmModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-              <h3 className="text-base font-semibold text-gray-800">Confirm delete</h3>
-              <p className="mt-2 text-sm text-gray-600">
-                Delete {pendingDelete?.item?.name || 'this item'}?
-              </p>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowDeleteConfirmModal(false);
-                    setPendingDelete(null);
+                  disabled={index === 0}
+                  onClick={() => handleMoveFaq(index, 'up')}
+                  style={{
+                    padding: '7px 12px',
+                    borderRadius: '0.625rem',
+                    border: 'none',
+                    background: index === 0 ? 'rgba(180, 180, 180, 0.18)' : Colors.skyFaint,
+                    color: index === 0 ? Colors.blueMuted : Colors.blue,
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: index === 0 ? 'not-allowed' : 'pointer',
                   }}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100"
                 >
-                  Cancel
+                  Up
                 </button>
+
                 <button
                   type="button"
-                  onClick={handleFinalDelete}
-                  className="rounded-lg bg-red-500 px-3 py-2 text-sm font-semibold text-white hover:bg-red-600"
+                  disabled={index === faqs.length - 1}
+                  onClick={() => handleMoveFaq(index, 'down')}
+                  style={{
+                    padding: '7px 12px',
+                    borderRadius: '0.625rem',
+                    border: 'none',
+                    background:
+                      index === faqs.length - 1 ? 'rgba(180, 180, 180, 0.18)' : Colors.skyFaint,
+                    color: index === faqs.length - 1 ? Colors.blueMuted : Colors.blue,
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: index === faqs.length - 1 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Down
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleEditFaq(faq)}
+                  style={{
+                    padding: '7px 12px',
+                    borderRadius: '0.625rem',
+                    border: 'none',
+                    background: Colors.greenFaint,
+                    color: Colors.green,
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Edit
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteFaq(faq)}
+                  style={{
+                    padding: '7px 12px',
+                    borderRadius: '0.625rem',
+                    border: 'none',
+                    background: Colors.dangerFaint,
+                    color: Colors.danger,
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
                 >
                   Delete
                 </button>
               </div>
             </div>
           </div>
-        )}
+        ))}
+      </div>
 
-        {showSuccessModal && (
-          <div className="fixed right-4 top-4 z-50 rounded-xl bg-[#3878c2] px-4 py-2 text-sm font-semibold text-white shadow-lg">
-            Changes saved successfully
+      <SectionLabel>Activity History</SectionLabel>
+
+      <div
+        style={{
+          ...card,
+          padding: '1.25rem',
+        }}
+      >
+        <div style={{ display: 'grid', gap: 10 }}>
+          {history.length === 0 ? (
+            <p style={typography.small}>No activity history yet.</p>
+          ) : (
+            history.map((log) => (
+              <div
+                key={log.id}
+                style={{
+                  border: `1px solid ${Colors.border}`,
+                  borderRadius: '0.875rem',
+                  padding: '0.875rem 1rem',
+                  background: '#FBFDFF',
+                }}
+              >
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: '0.9rem',
+                    fontWeight: 800,
+                    color: Colors.text,
+                  }}
+                >
+                  {log.message}
+                </p>
+                {log.details && <p style={{ ...typography.small, marginTop: 4 }}>{log.details}</p>}
+                <p
+                  style={{
+                    margin: '6px 0 0',
+                    fontSize: '0.75rem',
+                    color: Colors.blueMuted,
+                    fontWeight: 600,
+                  }}
+                >
+                  {log.formattedDate} • {log.formattedTime}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {isEditModalOpen && editItem && (
+        <Modal
+          title={
+            editType === 'schedule'
+              ? 'Edit Shop Schedule'
+              : editType === 'load'
+                ? 'Edit Load Type'
+                : 'Edit Item'
+          }
+          onClose={closeEditModal}
+        >
+          {editType === 'schedule' ? (
+            <div style={{ display: 'grid', gap: 14 }}>
+              <Field label="Opens">
+                <input
+                  ref={openTimeRef}
+                  type="time"
+                  value={editItem.opens}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, opens: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </Field>
+
+              <Field label="Closes">
+                <input
+                  ref={closeTimeRef}
+                  type="time"
+                  value={editItem.closes}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, closes: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </Field>
+            </div>
+          ) : editType === 'load' ? (
+            <div style={{ display: 'grid', gap: 14 }}>
+              <Field label="Load Type ID">
+                <input
+                  value={editItem.id}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, id: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </Field>
+
+              <Field label="Label">
+                <input
+                  value={editItem.label}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, label: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </Field>
+
+              <Field label="Sublabel">
+                <input
+                  value={editItem.sublabel}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, sublabel: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </Field>
+
+              <Field label="Description">
+                <textarea
+                  value={editItem.description}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, description: event.target.value }))
+                  }
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                    resize: 'vertical',
+                  }}
+                />
+              </Field>
+
+              <Field label="Price">
+                <input
+                  type="number"
+                  min="0"
+                  value={editItem.price}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, price: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </Field>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 14 }}>
+              <Field label="Name">
+                <input
+                  value={editItem.name}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, name: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </Field>
+
+              <Field label="Current Price">
+                <input
+                  type="number"
+                  min="0"
+                  value={editItem.currentPrice}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, currentPrice: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </Field>
+
+              <Field label="Estimated Hours">
+                <input
+                  type="number"
+                  min="0"
+                  value={editItem.estimatedHours}
+                  onChange={(event) =>
+                    setEditItem((prev) => ({ ...prev, estimatedHours: event.target.value }))
+                  }
+                  style={{
+                    width: '100%',
+                    border: `1px solid ${Colors.border}`,
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </Field>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={closeEditModal}
+              style={{
+                padding: '9px 18px',
+                borderRadius: '0.75rem',
+                background: Colors.skyFaint,
+                color: Colors.blue,
+                fontSize: '0.875rem',
+                fontWeight: 800,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSaveEdit}
+              style={{
+                padding: '9px 18px',
+                borderRadius: '0.75rem',
+                background: Colors.green,
+                color: Colors.white,
+                fontSize: '0.875rem',
+                fontWeight: 800,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Save Changes
+            </button>
           </div>
-        )}
-      </main>
+        </Modal>
+      )}
 
-      <BottomNavbar />
+      {showDeleteConfirmModal && pendingDelete && (
+        <Modal title="Delete Item" onClose={closeDeleteModal}>
+          <p style={typography.body}>
+            Are you sure you want to delete <strong>{pendingDelete.item.name}</strong>?
+          </p>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={closeDeleteModal}
+              style={{
+                padding: '9px 18px',
+                borderRadius: '0.75rem',
+                background: Colors.skyFaint,
+                color: Colors.blue,
+                fontSize: '0.875rem',
+                fontWeight: 800,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDeleteItem}
+              style={{
+                padding: '9px 18px',
+                borderRadius: '0.75rem',
+                background: Colors.danger,
+                color: Colors.white,
+                fontSize: '0.875rem',
+                fontWeight: 800,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {showSuccessModal && (
+        <Modal title="Success" onClose={() => setShowSuccessModal(false)}>
+          <p style={typography.body}>{successMessage}</p>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
+            <button
+              type="button"
+              onClick={() => setShowSuccessModal(false)}
+              style={{
+                padding: '9px 18px',
+                borderRadius: '0.75rem',
+                background: Colors.green,
+                color: Colors.white,
+                fontSize: '0.875rem',
+                fontWeight: 800,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Okay
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

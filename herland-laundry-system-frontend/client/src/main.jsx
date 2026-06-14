@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { useLocation, useNavigate } from 'react-router-dom'
-import BottomNavbar from './shared/navigation/BottomNavbar'
+
+import Sidebar from './shared/navigation/Sidebar'
 import TopNavbar from './shared/navigation/TopNavbar'
 import { useLayout } from './app/LayoutContext'
 import AppRoutes from './app/Routes'
@@ -23,13 +24,27 @@ function AppShell() {
   const isAuthPage = isForgotPasswordRoute || isResetPasswordRoute
   const isPublicRoute = isLandingRoute || isLoginRoute || isSignupRoute || isRoleSwitcherRoute
   const { hideBottomNav } = useLayout()
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false)
 
   const isManagerRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff')
   const shouldHideBottomNav = hideBottomNav || isLoginRoute || isSignupRoute || isManagerRoute
+  const shouldShowDesktopSidebar = !isPublicRoute && !isAuthPage
+  const shouldShowDesktopTopNavbar = isLandingRoute || isLoginRoute || isSignupRoute
 
   useEffect(() => {
     const syncSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error } = await supabase.auth.getSession()
+
+      if (error) {
+        console.error('Session error:', error.message)
+        if (error.message.includes('Refresh Token') || error.message.includes('refresh token')) {
+          await supabase.auth.signOut().catch(() => {})
+          window.sessionStorage.removeItem('activeRole')
+          navigate('/login', { replace: true })
+          return
+        }
+      }
 
       if (session) {
         let role = window.sessionStorage.getItem('activeRole')
@@ -96,20 +111,54 @@ function AppShell() {
 
   return (
     <div className={`min-h-screen bg-white ${isLoginRoute ? 'h-screen overflow-hidden' : ''}`}>
-      <TopNavbar />
-      <div
-        className={`mx-auto w-full ${isLandingRoute ? 'max-w-none px-0' : 'max-w-none px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8'
-          } ${isLoginRoute ? '' : 'pb-24 lg:pb-10'}`}
-      >
-        <div className="min-w-0">
-          <AppRoutes />
-        </div>
-      </div>
-      {!shouldHideBottomNav && (
-        <div className="lg:hidden">
-          <BottomNavbar />
-        </div>
+      {shouldShowDesktopSidebar && (
+        <Sidebar
+          collapsed={isSidebarCollapsed}
+          onToggle={() => setIsSidebarCollapsed((current) => !current)}
+          className="max-lg:hidden"
+        />
       )}
+
+      <Sidebar
+        isOpen={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
+        className="lg:hidden"
+        showCollapse={false}
+        side="right"
+      />
+
+      <div
+        className={`min-h-screen transition-all duration-300 ease-in-out ${
+          shouldShowDesktopSidebar
+            ? isSidebarCollapsed
+              ? 'lg:ml-[72px] lg:w-[calc(100%-72px)]'
+              : 'lg:ml-[256px] lg:w-[calc(100%-256px)]'
+            : 'lg:ml-0 lg:w-full'
+        }`}
+      >
+        <TopNavbar
+          onMenuClick={() => setIsMobileSidebarOpen((current) => !current)}
+          className={shouldShowDesktopTopNavbar ? '' : 'lg:hidden'}
+        />
+
+        <div
+          className={`mx-auto w-full ${
+            isLandingRoute
+              ? 'max-w-none px-0'
+              : 'max-w-none px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8'
+          } ${isLoginRoute ? '' : 'pb-24 lg:pb-10'}`}
+        >
+          <div className="min-w-0">
+            <AppRoutes />
+          </div>
+        </div>
+
+        {!shouldHideBottomNav && (
+          <div className="lg:hidden">
+
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -5,13 +5,52 @@ export const formatDate = (date) => {
   if (!date) return "-";
   const today = new Date();
   const d = new Date(date);
-  const day = d.getDate().toString().padStart(2, "0");
-  const month = d.toLocaleString("default", { month: "long" });
+  if (Number.isNaN(d.getTime())) return "-";
+
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const year = d.getFullYear();
+  const formattedDate = `${month}/${day}/${year}`;
   
-  // Checking if it's today for a friendlier display
   return today.toDateString() === d.toDateString()
-    ? `Today | ${month} ${day}, ${d.getFullYear()}`
-    : `${month} ${day}, ${d.getFullYear()}`;
+    ? `Today | ${formattedDate}`
+    : formattedDate;
+};
+
+export const parseDateString = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  const stringValue = String(value).trim();
+  const isoDateOnly = /^\d{4}-\d{2}-\d{2}$/;
+  const usDateOnly = /^\d{2}\/\d{2}\/\d{4}$/;
+
+  if (isoDateOnly.test(stringValue)) {
+    const [year, month, day] = stringValue.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  if (usDateOnly.test(stringValue)) {
+    const [month, day, year] = stringValue.split('/').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  const parsed = new Date(stringValue);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+};
+
+export const formatDateMMDDYYYY = (date) => {
+  const parsed = parseDateString(date);
+  if (!parsed) return '';
+
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const year = parsed.getFullYear();
+
+  return `${month}/${day}/${year}`;
 };
 
 /**

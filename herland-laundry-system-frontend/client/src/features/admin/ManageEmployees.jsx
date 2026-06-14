@@ -1,20 +1,12 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import BottomNavbar from '../../shared/navigation/BottomNavbar'
+
 import InfoCard from '../../shared/components/InfoCard'
 import { FilterSelect, RadioRow } from '../../shared/components/OptionInput'
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../shared/components/Toast';
 import { useConfirm } from '../../shared/components/ConfirmationModal';
 
-// Mock data for seeding
-  const mockemployee = [
-    { name: 'Maria Santos', role: 'staff', phone: '09171234567', email: 'maria@herland.com', password: 'password123' },
-    { name: 'Ricardo Dalisay', role: 'staff', phone: '09187654321', email: 'ricardo@herland.com', password: 'password123' },
-    { name: 'Elena Gilbert', role: 'staff', phone: '09191112222', email: 'elena@herland.com', password: 'password123' },
-    { name: 'Stefan Salvatore', role: 'rider', phone: '09203334444', email: 'stefan@herland.com', password: 'password123' },
-    { name: 'Bonnie Bennett', role: 'staff', phone: '09215556666', email: 'bonnie@herland.com', password: 'password123' },
-  ];
 
   export default function ManageEmployees() {
   const navigate = useNavigate();
@@ -291,7 +283,7 @@ import { useConfirm } from '../../shared/components/ConfirmationModal';
         </div>
       </div>
 
-      <BottomNavbar />
+
     </div>
   );
 }

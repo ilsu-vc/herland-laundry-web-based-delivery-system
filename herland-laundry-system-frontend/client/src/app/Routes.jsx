@@ -7,13 +7,15 @@ const BookNow = lazy(() => import('../features/auth/BookNow'))
 const PaymentForm = lazy(() => import('../features/auth/PaymentForm'))
 const BookingHistory = lazy(() => import('../features/user/bookings/BookingHistory'))
 const BookingDetails = lazy(() => import('../features/user/bookings/BookingDetails'))
+const Feedback = lazy(() => import('../features/user/bookings/Feedback'))
 const Notifications = lazy(() => import('../shared/inbox/Notifications'))
 const Profile = lazy(() => import('../features/user/profile/Profile'))
 const DigitalReceipt = lazy(() => import('../features/user/bookings/DigitalReceipt'))
 const LandingPage = lazy(() => import('../features/landing/LandingPage'))
-const Dashboard = lazy(() => import('../features/landing/Dashboard'))
+// Dashboard component removed; routes now resolve based on role
 const RiderDashboard = lazy(() => import('../features/rider/RiderDashboard'))
 const ManageTasks = lazy(() => import('../features/rider/ManageTasks'))
+const CompletedTasks = lazy(() => import('../features/rider/CompletedTasks'))
 const StaffDashboard = lazy(() => import('../features/staff/StaffDashboard'))
 const AdminDashboard = lazy(() => import('../features/admin/AdminDashboard'))
 const ManageBookings = lazy(() => import('../features/admin/ManageBookings'))
@@ -21,7 +23,8 @@ const ManageEmployees = lazy(() => import('../features/admin/ManageEmployees'))
 const ManageServices = lazy(() => import('../features/admin/ManageServices'))
 const ManageUsers = lazy(() => import('../features/admin/ManageUsers'))
 const Reports = lazy(() => import('../features/admin/Reports'))
-const TempRoleSwitcher = lazy(() => import('../shared/permissions/TempRoleSwitcher'))
+const FeedbackReports = lazy(() => import('../features/admin/FeedbackReports'))
+
 const ForgotPassword = lazy(() => import('../features/auth/ForgotPassword'))
 const ResetPassword = lazy(() => import('../features/auth/ResetPassword'))
 const ManageAdmins = lazy(() => import('../features/admin/ManageAdmins'))
@@ -36,10 +39,10 @@ const PageLoader = () => (
 )
 
 function resolveNotificationsPathByRole() {
-	const activeRole = window.sessionStorage.getItem('activeRole')
+	const activeRole = String(window.sessionStorage.getItem('activeRole') || '').toLowerCase()
 
-	if (activeRole === 'Admin') return '/admin/notifications'
-	if (activeRole === 'staff') return '/staff/notifications'
+	if (activeRole === 'admin') return '/admin/notifications'
+	if (activeRole === 'staff' || activeRole === 'employee') return '/staff/notifications'
 	if (activeRole === 'rider') return '/rider/notifications'
 	return '/user/notifications'
 }
@@ -48,8 +51,18 @@ function NotificationsRoleRedirect() {
 	return <Navigate to={resolveNotificationsPathByRole()} replace />
 }
 
+function resolveDashboardByRole() {
+	const activeRole = String(window.sessionStorage.getItem('activeRole') || '').toLowerCase();
+
+	if (activeRole === 'admin') return <AdminDashboard />;
+	if (activeRole === 'staff' || activeRole === 'employee') return <StaffDashboard />;
+	if (activeRole === 'rider') return <RiderDashboard />;
+	// default for customers / guests
+	return <BookingHistory />;
+}
+
 function resolveBookingsElementByRole() {
-	const activeRole = window.sessionStorage.getItem('activeRole')
+	const activeRole = String(window.sessionStorage.getItem('activeRole') || '').toLowerCase()
 	if (activeRole === 'rider') return <ManageTasks />
 	return <BookingHistory />
 }
@@ -59,12 +72,16 @@ export default function AppRoutes() {
 		<Suspense fallback={<PageLoader />}>
 			<Routes>
 				<Route path="/" element={<LandingPage />} />
-				<Route path="/dashboard" element={<Dashboard />} />
+				<Route path="/dashboard" element={resolveDashboardByRole()} />
 				<Route path="/landing" element={<LandingPage />} />
 				<Route path="/guest" element={<LandingPage />} />
-				<Route path="/user" element={<Dashboard />} />
+				<Route path="/user" element={resolveDashboardByRole()} />
 				<Route path="/rider" element={<RiderDashboard />} />
+				<Route path="/rider/dashboard" element={<RiderDashboard />} />
 				<Route path="/rider/manage-tasks" element={<ManageTasks />} />
+				<Route path="/rider/tasks/active" element={<ManageTasks />} />
+				<Route path="/rider/completed-tasks" element={<CompletedTasks />} />
+				<Route path="/rider/tasks/completed" element={<CompletedTasks />} />
 				<Route path="/staff" element={<StaffDashboard />} />
 				<Route path="/staff/manage-bookings" element={<ManageBookings />} />
 				<Route path="/admin" element={<AdminDashboard />} />
@@ -74,30 +91,34 @@ export default function AppRoutes() {
 				<Route path="/admin/manage-services" element={<ManageServices />} />
 				<Route path="/admin/manage-users" element={<ManageUsers />} />
 				<Route path="/admin/reports" element={<Reports />} />
-				<Route path="/role-switcher" element={<TempRoleSwitcher />} />
+				<Route path="/admin/feedback-reports" element={<FeedbackReports />} />
+
 				<Route path="/login" element={<Login />} />
 				<Route path="/signup" element={<Signup />} />
+				<Route path="/user/book-now" element={<BookNow />} />
+				<Route path="/user/bookings" element={<BookingHistory />} />
 				<Route path="/forgot-password" element={<ForgotPassword />} />
 				<Route path="/reset-password" element={<ResetPassword />} />
 				<Route 
 					path="/book" 
 					element={
-						['Staff', 'Rider'].includes(window.sessionStorage.getItem('activeRole')) 
-							? <Navigate to={window.sessionStorage.getItem('activeRole') === 'Staff' ? '/staff' : '/rider'} replace /> 
+						(['staff', 'rider'].includes(String(window.sessionStorage.getItem('activeRole') || '').toLowerCase())) 
+							? <Navigate to={String(window.sessionStorage.getItem('activeRole') || '').toLowerCase() === 'staff' ? '/staff' : '/rider'} replace /> 
 							: <BookNow />
 					} 
 				/>
 				<Route 
 					path="/payment" 
 					element={
-						['Staff', 'Rider'].includes(window.sessionStorage.getItem('activeRole')) 
-							? <Navigate to={window.sessionStorage.getItem('activeRole') === 'Staff' ? '/staff' : '/rider'} replace /> 
+						(['staff', 'rider'].includes(String(window.sessionStorage.getItem('activeRole') || '').toLowerCase())) 
+							? <Navigate to={String(window.sessionStorage.getItem('activeRole') || '').toLowerCase() === 'staff' ? '/staff' : '/rider'} replace /> 
 							: <PaymentForm />
 					} 
 				/>
 				<Route path="/bookings" element={resolveBookingsElementByRole()} />
 				<Route path="/bookings/:bookingId" element={<BookingDetails />} />
 				<Route path="/bookings/:bookingId/receipt" element={<DigitalReceipt />} />
+				<Route path="/feedback/:bookingId" element={<Feedback />} />
 				<Route path="/notifications" element={<NotificationsRoleRedirect />} />
 				<Route path="/user/notifications" element={<Notifications />} />
 				<Route path="/staff/notifications" element={<Notifications />} />

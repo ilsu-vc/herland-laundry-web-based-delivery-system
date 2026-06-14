@@ -116,7 +116,7 @@ const notificationService = {
                 break;
             case 'COMPLETED':
                 subject = 'Booking Completed';
-                message = `Thank you for choosing Herland Laundry! Booking #${bookingId} is complete.`;
+                message = `Thank you for choosing Herland Laundry! Booking #${bookingId} is complete. You can now submit feedback in your bookings tab.`;
                 break;
             case 'CANCELLED':
                 subject = 'Booking Cancelled';

@@ -9,6 +9,48 @@ router.post('/register', async (req, res) => {
     try {
         const { email, password, phone, metadata } = req.body;
         
+        // 1. Check if email already exists
+        if (email && email.trim() !== '') {
+            const { data: existingEmail } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('email', email)
+                .limit(1);
+            
+            if (existingEmail && existingEmail.length > 0) {
+                return res.status(400).json({ error: 'This email address is linked to an existing account. Login or use a different email.' });
+            }
+        }
+
+        // 2. Check if phone already exists
+        if (phone) {
+            let cleanPhone = phone.replace(/\D/g, '');
+            let variants = [cleanPhone];
+            if (cleanPhone.startsWith('09')) {
+                variants.push(cleanPhone.substring(1));
+                variants.push('63' + cleanPhone.substring(1));
+                variants.push('+63' + cleanPhone.substring(1));
+            } else if (cleanPhone.startsWith('9') && cleanPhone.length === 10) {
+                variants.push('0' + cleanPhone);
+                variants.push('63' + cleanPhone);
+                variants.push('+63' + cleanPhone);
+            } else if (cleanPhone.startsWith('63')) {
+                variants.push('0' + cleanPhone.substring(2));
+                variants.push(cleanPhone.substring(2));
+                variants.push('+' + cleanPhone);
+            }
+
+            const { data: existingPhone } = await supabase
+                .from('profiles')
+                .select('id')
+                .in('phone_number', variants)
+                .limit(1);
+
+            if (existingPhone && existingPhone.length > 0) {
+                return res.status(400).json({ error: 'This phone number is linked to an existing account. Login or use a different number.' });
+            }
+        }
+        
         // Prepare Supabase SignUp Options
         let signUpOptions = {
             password,
