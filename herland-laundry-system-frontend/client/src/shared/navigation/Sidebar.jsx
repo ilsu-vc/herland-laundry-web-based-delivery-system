@@ -264,7 +264,18 @@ export default function Sidebar({
     };
 
     window.addEventListener('notificationsUpdated', handleNotificationsUpdated);
-    return () => window.removeEventListener('notificationsUpdated', handleNotificationsUpdated);
+
+    const channel = supabase
+      .channel('sidebar-notifications-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
+        loadNotifications(session.access_token);
+      })
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('notificationsUpdated', handleNotificationsUpdated);
+      supabase.removeChannel(channel);
+    };
   }, [session?.access_token]);
 
   useEffect(() => {
