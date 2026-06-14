@@ -648,24 +648,27 @@ export default function BookingDetails() {
                     {booking?.paymentDetails?.status || "Pending"}
                   </span>
                 </div>
-                {isAdminOrStaff && booking?.paymentDetails?.method === "GCash" && booking?.paymentDetails?.referenceNumber && (
-                  <div className="sm:col-span-2 mt-2">
-                    <p className="text-xs font-semibold uppercase text-[#b4b4b4]">
-                      GCash Reference Number
-                    </p>
-                    <p className="mt-1 text-xl font-black text-[#374151] font-mono tracking-wider">
-                      {booking.paymentDetails.referenceNumber}
-                    </p>
-                  </div>
-                )}
-                {!isAdminOrStaff && booking?.paymentDetails?.method === "GCash" && (!booking?.paymentDetails?.referenceNumber || booking?.paymentDetails?.referenceNumber === "-") && (
-                  <div className="sm:col-span-2 mt-2">
-                    <button
-                      onClick={handlePayNow}
-                      className="w-full rounded-lg border border-[#4bad40] bg-[#4bad40] px-3 py-2.5 text-sm font-bold text-white hover:bg-[#3e8e35] transition shadow-sm"
-                    >
-                      Submit GCash Reference
-                    </button>
+                {booking?.paymentDetails?.method === "GCash" && (
+                  <div className="sm:col-span-2 mt-2 space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-[#b4b4b4]">
+                        GCash Reference Number
+                      </p>
+                      <p className="mt-1 text-xl font-black text-[#374151] font-mono tracking-wider">
+                        {booking?.paymentDetails?.referenceNumber && booking.paymentDetails.referenceNumber !== "-" 
+                          ? booking.paymentDetails.referenceNumber 
+                          : <span className="text-gray-400 font-normal italic text-base">Empty</span>}
+                      </p>
+                    </div>
+
+                    {!isAdminOrStaff && (!booking?.paymentDetails?.referenceNumber || booking?.paymentDetails?.referenceNumber === "-") && (
+                      <button
+                        onClick={handlePayNow}
+                        className="w-full rounded-lg border border-[#4bad40] bg-[#4bad40] px-3 py-2.5 text-sm font-bold text-white hover:bg-[#3e8e35] transition shadow-sm"
+                      >
+                        Submit GCash Reference
+                      </button>
+                    )}
                   </div>
                 )}
                 <div className="sm:col-span-2 space-y-3 mt-2 border-t border-[#f0f0f0] pt-4">
