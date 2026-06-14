@@ -201,10 +201,10 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | Layer    | Platform | URL               |
 |----------|----------|-------------------|
 | Frontend | Vercel   | [https://laundry-booking-rho.vercel.app](https://laundry-booking-rho.vercel.app) |
-| Backend  | Railway  | [https://laundry-booking-production.up.railway.app](https://laundry-booking-production.up.railway.app) |
+| Backend  | Render   | [https://laundry-booking-5gb4.onrender.com](https://laundry-booking-5gb4.onrender.com) |
 | Database | Supabase | *(managed)*         |
 
-Both Vercel and Railway track the `main` branch. Pushing to `main` automatically triggers a new deployment.
+Both Vercel and Render track the `main` branch. Pushing to `main` automatically triggers a new deployment.
 
 👉 **Check out the [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for detailed, step-by-step instructions on deploying the project.**
 
