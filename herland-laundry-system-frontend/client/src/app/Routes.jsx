@@ -102,16 +102,16 @@ export default function AppRoutes() {
 				<Route 
 					path="/book" 
 					element={
-						(['staff', 'rider'].includes(String(window.sessionStorage.getItem('activeRole') || '').toLowerCase())) 
-							? <Navigate to={String(window.sessionStorage.getItem('activeRole') || '').toLowerCase() === 'staff' ? '/staff' : '/rider'} replace /> 
+						(String(window.sessionStorage.getItem('activeRole') || '').toLowerCase() === 'rider') 
+							? <Navigate to="/rider" replace /> 
 							: <BookNow />
 					} 
 				/>
 				<Route 
 					path="/payment" 
 					element={
-						(['staff', 'rider'].includes(String(window.sessionStorage.getItem('activeRole') || '').toLowerCase())) 
-							? <Navigate to={String(window.sessionStorage.getItem('activeRole') || '').toLowerCase() === 'staff' ? '/staff' : '/rider'} replace /> 
+						(String(window.sessionStorage.getItem('activeRole') || '').toLowerCase() === 'rider') 
+							? <Navigate to="/rider" replace /> 
 							: <PaymentForm />
 					} 
 				/>

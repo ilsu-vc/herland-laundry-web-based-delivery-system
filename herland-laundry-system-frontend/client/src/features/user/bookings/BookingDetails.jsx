@@ -420,7 +420,7 @@ export default function BookingDetails() {
                 Next: {ACTION_EFFECTS[getBookingStatusKey(booking)].actionLabel}
               </button>
             )}
-            {isAdminOrStaff && booking?.status?.toLowerCase() !== "cancelled" && (
+            {activeRole === 'admin' && booking?.status?.toLowerCase() !== "cancelled" && (
               <button
                 onClick={() => navigate(`/bookings/${bookingId}/receipt`)}
                 className="rounded-lg border border-[#4bad40] px-3 py-1.5 text-sm font-medium text-[#4bad40] hover:bg-[#4bad40]/5 transition"

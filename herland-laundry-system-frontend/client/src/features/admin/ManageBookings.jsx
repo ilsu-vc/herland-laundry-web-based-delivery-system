@@ -246,6 +246,13 @@ function normalizeBooking(raw) {
     cancellationReason: raw.cancellationReason || raw.cancellation_reason || '',
   };
 }
+const getTodayString = () => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export default function ManageBookings() {
   const navigate = useNavigate();
@@ -259,17 +266,16 @@ export default function ManageBookings() {
   const [saveLoading, setSaveLoading] = useState('');
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // date sub-filters staged — only applied when Filter is clicked
   const [yearInput, setYearInput] = useState('');
   const [monthInput, setMonthInput] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(getTodayString());
+  const [dateTo, setDateTo] = useState(getTodayString());
 
   // applied values
   const [appliedYear, setAppliedYear] = useState('');
   const [appliedMonth, setAppliedMonth] = useState('');
-  const [appliedFrom, setAppliedFrom] = useState('');
-  const [appliedTo, setAppliedTo] = useState('');
+  const [appliedFrom, setAppliedFrom] = useState(getTodayString());
+  const [appliedTo, setAppliedTo] = useState(getTodayString());
 
   const selectedStatusLabel =
     STATUS_FILTER_OPTIONS.find((option) => option.value === statusFilter)?.label || 'Booking Received';

@@ -274,6 +274,23 @@ function isTodayTask(booking) {
 	return toDateOnly(booking.pickupDate) === today || toDateOnly(booking.deliveryDate) === today
 }
 
+function isPastOrOverdue(booking) {
+	const today = toDateOnly(new Date())
+	const type = STATUS_META[booking.status]?.type || ''
+	
+	let taskDate = ''
+	if (type === 'Pickup') {
+		taskDate = toDateOnly(booking.pickupDate)
+	} else if (type === 'Delivery') {
+		taskDate = toDateOnly(booking.deliveryDate)
+	} else {
+		taskDate = toDateOnly(booking.pickupDate) || toDateOnly(booking.deliveryDate)
+	}
+
+	if (!taskDate) return false;
+	return taskDate < today;
+}
+
 function getChipCounts(list) {
 	return {
 		All: list.length,
@@ -332,8 +349,8 @@ export default function ManageTasks() {
 			const availableData = await availableRes.json()
 			const assignedData = await assignedRes.json()
 
-			setAvailableBookings(getListFromResponse(availableData).map(mapBookingData))
-			setBookings(getListFromResponse(assignedData).map(mapBookingData))
+			setAvailableBookings(getListFromResponse(availableData).map(mapBookingData).filter(b => !isPastOrOverdue(b)))
+			setBookings(getListFromResponse(assignedData).map(mapBookingData).filter(b => !isPastOrOverdue(b)))
 		} catch (err) {
 			console.error(err)
 			setError(err.message || 'Something went wrong while loading tasks.')
