@@ -108,7 +108,7 @@ router.get('/available-bookings', verifyRole('Rider'), async (req, res) => {
         const { data, error } = await supabase
             .from('bookings')
             .select('*')
-            .or('status.eq.Rider Dispatched for Pickup,status.eq.Out for Delivery')
+            .or('status.eq.Booking Accepted,status.eq.Ready for Pick-up,status.eq.Rider Dispatched for Pickup,status.eq.Out for Delivery')
             .is('rider_id', null)
             .order('created_at', { ascending: false });
 

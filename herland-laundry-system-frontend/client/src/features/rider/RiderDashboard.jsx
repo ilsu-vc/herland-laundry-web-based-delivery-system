@@ -23,7 +23,19 @@ const STATUS_META = {
     color: Colors.blue,
     bg: 'rgba(56,120,194,0.1)',
   },
+  'Booking Accepted': {
+    label: 'Pickup',
+    type: 'Pickup',
+    color: Colors.blue,
+    bg: 'rgba(56,120,194,0.1)',
+  },
   'Out for Delivery': {
+    label: 'Delivery',
+    type: 'Delivery',
+    color: Colors.green,
+    bg: 'rgba(75,173,64,0.1)',
+  },
+  'Ready for Pick-up': {
     label: 'Delivery',
     type: 'Delivery',
     color: Colors.green,

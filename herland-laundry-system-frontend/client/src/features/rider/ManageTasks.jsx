@@ -23,7 +23,19 @@ const STATUS_META = {
 		color: C.blue,
 		bg: 'rgba(56,120,194,0.1)',
 	},
+	'Booking Accepted': {
+		label: 'Pickup',
+		type: 'Pickup',
+		color: C.blue,
+		bg: 'rgba(56,120,194,0.1)',
+	},
 	'Out for Delivery': {
+		label: 'Delivery',
+		type: 'Delivery',
+		color: C.green,
+		bg: 'rgba(75,173,64,0.1)',
+	},
+	'Ready for Pick-up': {
 		label: 'Delivery',
 		type: 'Delivery',
 		color: C.green,
@@ -413,6 +425,14 @@ export default function ManageTasks() {
 			const type = STATUS_META[task.status]?.type || ''
 			let taskDate = ''
 			
+			if (activeTab === 'assigned') {
+				if (task.status === 'Rider Dispatched for Pickup' || task.status === 'Booking Accepted') {
+					task.isPickupAction = true
+				} else if (task.status === 'Out for Delivery' || task.status === 'Ready for Pick-up') {
+					task.isDeliveryAction = true
+				}
+			}
+
 			if (type === 'Pickup') {
 				taskDate = toDateOnly(task.pickupDate)
 			} else if (type === 'Delivery') {
@@ -1100,7 +1120,7 @@ export default function ManageTasks() {
 
 						{/* Receipt */}
 						{/* Action block for active assigned tasks */}
-						{(selectedBooking.status === 'Rider Dispatched for Pickup' || selectedBooking.status === 'Out for Delivery') && (
+						{(['Booking Accepted', 'Rider Dispatched for Pickup', 'Ready for Pick-up', 'Out for Delivery'].includes(selectedBooking.status)) && (
 							<div style={{
 								background: C.white,
 								borderRadius: '1rem',
@@ -1120,7 +1140,7 @@ export default function ManageTasks() {
 									Update Status
 								</p>
 
-								{selectedBooking.status === 'Rider Dispatched for Pickup' && (
+								{['Booking Accepted', 'Rider Dispatched for Pickup'].includes(selectedBooking.status) && (
 									<button
 										onClick={() => handleUpdateStatus(selectedBooking, 'Picked Up from Customer')}
 										disabled={actionLoadingId === selectedBooking.dbId}
@@ -1143,7 +1163,7 @@ export default function ManageTasks() {
 									</button>
 								)}
 
-								{selectedBooking.status === 'Out for Delivery' && (
+								{['Ready for Pick-up', 'Out for Delivery'].includes(selectedBooking.status) && (
 									<button
 										onClick={() => handleUpdateStatus(selectedBooking, 'Laundry Delivered')}
 										disabled={actionLoadingId === selectedBooking.dbId}
