@@ -201,10 +201,12 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | Layer    | Platform | URL               |
 |----------|----------|-------------------|
 | Frontend | Vercel   | *(your Vercel URL)* |
-| Backend  | Render   | *(your Render URL)* |
+| Backend  | Railway  | *(your Railway URL)* |
 | Database | Supabase | *(managed)*         |
 
-Both Vercel and Render track the `main` branch. Pushing to `main` automatically triggers a new deployment.
+Both Vercel and Railway track the `main` branch. Pushing to `main` automatically triggers a new deployment.
+
+👉 **Check out the [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for detailed, step-by-step instructions on deploying the project.**
 
 ---
 
