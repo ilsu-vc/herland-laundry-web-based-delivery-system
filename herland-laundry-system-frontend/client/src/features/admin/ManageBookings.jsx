@@ -378,6 +378,17 @@ export default function ManageBookings() {
 
   useEffect(() => {
     fetchBookings();
+
+    const channel = supabase
+      .channel('admin-bookings-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+        fetchBookings();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const filtered = useMemo(() => {

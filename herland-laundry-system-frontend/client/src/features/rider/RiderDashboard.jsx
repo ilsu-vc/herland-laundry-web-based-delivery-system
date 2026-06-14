@@ -302,6 +302,17 @@ export default function RiderDashboard() {
 
   useEffect(() => {
     fetchDashboardData();
+
+    const channel = supabase
+      .channel('rider-dashboard-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+        fetchDashboardData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const [dashboardFilter, setDashboardFilter] = useState('All');

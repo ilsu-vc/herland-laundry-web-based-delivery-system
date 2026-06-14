@@ -385,6 +385,17 @@ export default function ManageTasks() {
 
 	useEffect(() => {
 		fetchAll()
+
+		const channel = supabase
+			.channel('rider-bookings-changes')
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+				fetchAll()
+			})
+			.subscribe()
+
+		return () => {
+			supabase.removeChannel(channel)
+		}
 	}, [])
 
 	const filter = activeTab === 'available' ? availableFilter : assignedFilter

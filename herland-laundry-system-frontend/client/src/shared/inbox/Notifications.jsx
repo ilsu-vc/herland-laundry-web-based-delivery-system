@@ -111,6 +111,17 @@ export default function Notifications() {
 
 	useEffect(() => {
 		fetchNotifications()
+
+		const channel = supabase
+			.channel('notifications-changes')
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
+				fetchNotifications()
+			})
+			.subscribe()
+
+		return () => {
+			supabase.removeChannel(channel)
+		}
 	}, [fetchNotifications])
 
 	const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications])
