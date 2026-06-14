@@ -214,6 +214,7 @@ export default function LandingPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loadingRates, setLoadingRates] = useState(true);
   const [serviceItems, setServiceItems] = useState([]);
+  const [loadItems, setLoadItems] = useState(LOADS);
   const [fetchedFaqs, setFetchedFaqs] = useState(DEFAULT_FAQS);
   const [openFaq, setOpenFaq] = useState(0);
 
@@ -264,9 +265,22 @@ export default function LandingPage() {
 
         const services = data.services || [];
         const faqs = data.faqs || [];
+        
+        let loadedLoads = (data.loadOptions || [])
+          .filter(load => load.isEnabled !== false)
+          .map(load => ({
+            name: load.label,
+            kg: load.sublabel,
+            items: load.description,
+          }));
+          
+        if (loadedLoads.length === 0) {
+          loadedLoads = LOADS;
+        }
 
         if (!ignore) {
           setServiceItems(services);
+          setLoadItems(loadedLoads);
 
           if (faqs.length > 0) {
             setFetchedFaqs(faqs);
@@ -277,6 +291,7 @@ export default function LandingPage() {
 
         if (!ignore) {
           setServiceItems([]);
+          setLoadItems(LOADS);
           setFetchedFaqs(DEFAULT_FAQS);
         }
       } finally {
@@ -1029,7 +1044,7 @@ export default function LandingPage() {
           <p className="load-label">Load Type</p>
 
           <div className="loads-grid">
-            {LOADS.map((load) => (
+            {loadItems.map((load) => (
               <Card className="load-card" key={load.name}>
                 <div className="load-row">
                   <p className="load-name">{load.name}</p>

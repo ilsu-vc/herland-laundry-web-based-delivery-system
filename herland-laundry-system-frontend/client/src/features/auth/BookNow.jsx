@@ -660,29 +660,32 @@ function StepSelectServices({
   availableLoads,
   isEditMode = false,
 }) {
-  const loadOptions = availableLoads.length > 0 ? availableLoads : [
-    {
-      id: 'regular',
-      label: 'Regular Light Mix',
-      sublabel: 'Up to 7.5 kg',
-      description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.',
-      price: 220,
-    },
-    {
-      id: 'heavy',
-      label: 'Heavy Load',
-      sublabel: 'Up to 5 kg',
-      description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.',
-      price: 220,
-    },
-    {
-      id: 'perPiece',
-      label: 'Per Piece',
-      sublabel: '₱220 per item',
-      description: 'Comforter, Duvet, Pillow, etc.',
-      price: 220,
-    },
-  ];
+  const loadOptions = (() => {
+    const validLoads = availableLoads.filter(load => load.isEnabled !== false);
+    return validLoads.length > 0 ? validLoads : [
+      {
+        id: 'regular',
+        label: 'Regular Light Mix',
+        sublabel: 'Up to 7.5 kg',
+        description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.',
+        price: 220,
+      },
+      {
+        id: 'heavy',
+        label: 'Heavy Load',
+        sublabel: 'Up to 5 kg',
+        description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.',
+        price: 220,
+      },
+      {
+        id: 'perPiece',
+        label: 'Per Piece',
+        sublabel: '₱220 per item',
+        description: 'Comforter, Duvet, Pillow, etc.',
+        price: 220,
+      },
+    ];
+  })();
 
   const getStoredValue = (key, fallback) => {
     try {

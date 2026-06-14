@@ -359,10 +359,16 @@ export default function ManageServices() {
         ? servicesData.loadOptions
         : defaultLoadOptions;
 
+      const initialLoadEnabled = {};
+      incomingLoadOptions.forEach(opt => {
+        initialLoadEnabled[opt.id] = opt.isEnabled !== false;
+      });
+
       const incomingSchedule = normalizeSchedule(servicesData.schedule);
 
       setServices(incomingServices.length ? incomingServices : fallbackServices);
       setLoadOptions(incomingLoadOptions);
+      setLoadEnabled(initialLoadEnabled);
       setSchedule({
         opens: incomingSchedule.opens,
         closes: incomingSchedule.closes,
@@ -633,6 +639,45 @@ export default function ManageServices() {
     }
   };
 
+  const handleToggleLoadEnabled = async (opt) => {
+    try {
+      setFetchError('');
+      const headers = await getAuthHeaders();
+      const currentEnabled = loadEnabled[opt.id] !== false;
+      const nextEnabled = !currentEnabled;
+
+      const response = await fetch(`${API_BASE}/services/items/${opt.id}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentPrice: Number(opt.price),
+          type: 'load',
+          label: opt.label,
+          sublabel: opt.sublabel,
+          description: opt.description,
+          isEnabled: nextEnabled,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to toggle load type status.');
+      }
+
+      setLoadEnabled((prev) => ({
+        ...prev,
+        [opt.id]: nextEnabled,
+      }));
+      
+      addHistory(`Load type ${nextEnabled ? 'enabled' : 'disabled'}`, `${opt.label} was ${nextEnabled ? 'enabled' : 'disabled'}.`);
+      showSuccess(`Load type ${nextEnabled ? 'enabled' : 'disabled'} successfully.`);
+    } catch (error) {
+      setFetchError(error.message || 'Unable to toggle status.');
+    }
+  };
+
   const handleRevertSchedule = async () => {
     if (!hasPreviousSchedule) return;
 
@@ -707,6 +752,8 @@ export default function ManageServices() {
     }
   };
 
+  const [savingFaq, setSavingFaq] = useState(false);
+
   const handleSaveFaq = async () => {
     const question = faqDraft.question.trim();
     const answer = faqDraft.answer.trim();
@@ -716,7 +763,10 @@ export default function ManageServices() {
       return;
     }
 
+    if (savingFaq) return;
+
     try {
+      setSavingFaq(true);
       setFetchError('');
       const isDefaultFaq = String(editingFaqId || '').startsWith('default-');
       const headers = await getAuthHeaders();
@@ -762,6 +812,8 @@ export default function ManageServices() {
       setEditingFaqId(null);
     } catch (error) {
       setFetchError(error.message || 'Unable to save FAQ.');
+    } finally {
+      setSavingFaq(false);
     }
   };
 
@@ -1120,12 +1172,7 @@ export default function ManageServices() {
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setLoadEnabled((prev) => ({
-                      ...prev,
-                      [opt.id]: !prev[opt.id],
-                    }))
-                  }
+                  onClick={() => handleToggleLoadEnabled(opt)}
                   style={{
                     flex: 1,
                     padding: '7px 0',
@@ -1266,6 +1313,7 @@ export default function ManageServices() {
           <button
             type="button"
             onClick={handleSaveFaq}
+            disabled={savingFaq}
             style={{
               padding: '9px 22px',
               borderRadius: '0.75rem',
@@ -1274,10 +1322,11 @@ export default function ManageServices() {
               fontSize: '0.875rem',
               fontWeight: 800,
               border: 'none',
-              cursor: 'pointer',
+              cursor: savingFaq ? 'not-allowed' : 'pointer',
+              opacity: savingFaq ? 0.7 : 1,
             }}
           >
-            {editingFaqId ? 'Update FAQ' : 'Add FAQ'}
+            {savingFaq ? 'Saving...' : editingFaqId ? 'Update FAQ' : 'Add FAQ'}
           </button>
 
           {editingFaqId && (

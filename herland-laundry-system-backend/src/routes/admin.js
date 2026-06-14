@@ -452,6 +452,7 @@ router.get('/services', verifyRole('Admin'), async (req, res) => {
                         sublabel: parsed.sublabel || '',
                         description: parsed.description || '',
                         price: Number(i.current_price),
+                        isEnabled: parsed.isEnabled !== false
                     };
                 } catch (e) {
                     return null;
@@ -536,7 +537,7 @@ router.post('/services/items', verifyRole('Admin'), async (req, res) => {
 // Route: Update a service, add-on, or load price/details
 router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
     const { id } = req.params;
-    const { currentPrice, previousPrice, estimatedHours, type, label, sublabel, description } = req.body;
+    const { currentPrice, previousPrice, estimatedHours, type, label, sublabel, description, isEnabled } = req.body;
 
     if (currentPrice === undefined) {
         return res.status(400).json({ error: 'currentPrice is required' });
@@ -549,7 +550,7 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
         
         if (type === 'load') {
              // For loads, we encode the label, sublabel, and description into the `name` column
-             updateData.name = JSON.stringify({ label, sublabel, description });
+             updateData.name = JSON.stringify({ label, sublabel, description, isEnabled });
         } else {
             if (previousPrice !== undefined) {
                 updateData.previous_price = previousPrice !== null ? Number(previousPrice) : null;
@@ -575,7 +576,7 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
                     .insert({
                         id,
                         type: 'load',
-                        name: JSON.stringify({ label, sublabel, description }),
+                        name: JSON.stringify({ label, sublabel, description, isEnabled }),
                         current_price: Number(currentPrice),
                         sort_order: 99
                     });
