@@ -162,7 +162,7 @@ export default function Signup() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-[calc(100vh-5.75rem)] bg-slate-50">
       {/* Left side: Hero Image */}
       <div className="hidden lg:flex w-1/2 relative overflow-hidden bg-[#1a232e]">
         <img
@@ -171,29 +171,29 @@ export default function Signup() {
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#1a232e] to-transparent opacity-80" />
-        <div className="relative z-10 flex flex-col justify-end p-16 h-full">
-          <h1 className="text-4xl xl:text-5xl font-black text-white mb-4 leading-tight">Join Us Today,<br/>Wash Less Tomorrow.</h1>
-          <p className="text-lg text-gray-300 max-w-md bg-black/20 p-4 rounded-xl backdrop-blur-sm border border-white/10">
+        <div className="relative z-10 flex flex-col justify-end p-10 xl:p-12 h-full">
+          <h1 className="text-3xl xl:text-4xl font-black text-white mb-3 leading-tight">Join Us Today,<br/>Wash Less Tomorrow.</h1>
+          <p className="text-sm xl:text-base text-gray-300 max-w-md bg-black/20 p-3 rounded-xl backdrop-blur-sm border border-white/10">
             Create an account to track your orders, manage preferences, and get your clothes cleaned with just a few clicks.
           </p>
         </div>
       </div>
 
       {/* Right side: Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 xl:p-20 relative overflow-y-auto">
-        <div className="w-full max-w-md space-y-6">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-5 lg:p-6 xl:p-8 relative">
+        <div className="w-full max-w-md space-y-3">
           <div className="text-center lg:text-left">
-            <h2 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">Create an account</h2>
-            <p className="mt-2 text-sm text-gray-500 font-medium">Please enter your details to get started.</p>
+            <h2 className="text-2xl sm:text-[28px] font-black text-gray-900 tracking-tight">Create an account</h2>
+            <p className="mt-1 text-sm text-gray-500 font-medium">Please enter your details to get started.</p>
           </div>
 
-          <div className="bg-white p-5 sm:p-7 rounded-2xl shadow-xl shadow-gray-200/50 ring-1 ring-gray-100">
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-xl shadow-gray-200/50 ring-1 ring-gray-100">
+            <form onSubmit={handleSubmit} className="space-y-2.5">
               
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 {/* First Name */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">First Name</label>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-1">First Name</label>
                   <input
                     type="text"
                     name="firstName"
@@ -201,13 +201,13 @@ export default function Signup() {
                     onChange={handleChange}
                     onBlur={handleBlur}
                     placeholder="John"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none text-gray-900 font-medium placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-[#3878c2]/50 focus:border-[#3878c2] transition-all"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 outline-none text-gray-900 font-medium placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-[#3878c2]/50 focus:border-[#3878c2] transition-all"
                   />
                 </div>
 
                 {/* Last Name */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Last Name</label>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-1">Last Name</label>
                   <input
                     type="text"
                     name="lastName"
@@ -215,15 +215,15 @@ export default function Signup() {
                     onChange={handleChange}
                     onBlur={handleBlur}
                     placeholder="Doe"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none text-gray-900 font-medium placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-[#3878c2]/50 focus:border-[#3878c2] transition-all"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 outline-none text-gray-900 font-medium placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-[#3878c2]/50 focus:border-[#3878c2] transition-all"
                   />
                 </div>
               </div>
 
               {/* Phone Number */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Phone Number</label>
-                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#3878c2]/50 focus-within:border-[#3878c2] transition-all">
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-1">Phone Number</label>
+                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#3878c2]/50 focus-within:border-[#3878c2] transition-all">
                   <input
                     type="tel"
                     name="phoneNumber"
@@ -239,7 +239,7 @@ export default function Signup() {
 
               {/* Email */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Email Address <span className="text-gray-400 font-normal lowercase">(optional)</span></label>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-1">Email Address <span className="text-gray-400 font-normal lowercase">(optional)</span></label>
                 <input
                   type="email"
                   name="email"
@@ -247,14 +247,14 @@ export default function Signup() {
                   onChange={handleChange}
                   onBlur={handleBlur}
                   placeholder="name@example.com"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none text-gray-900 font-medium placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-[#3878c2]/50 focus:border-[#3878c2] transition-all"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 outline-none text-gray-900 font-medium placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-[#3878c2]/50 focus:border-[#3878c2] transition-all"
                 />
               </div>
 
               {/* Password */}
               <div className="relative">
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Password</label>
-                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#3878c2]/50 focus-within:border-[#3878c2] transition-all">
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-1">Password</label>
+                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#3878c2]/50 focus-within:border-[#3878c2] transition-all">
                     <input
                       type={showPassword ? 'text' : 'password'}
                       name="password"
@@ -282,7 +282,7 @@ export default function Signup() {
 
               {/* Password Conditions */}
               {(passwordFocused || touched.password || formData.password.length > 0) && (
-                <ul className="text-xs sm:text-sm my-2 list-none space-y-1 bg-gray-50 border border-gray-100 rounded-xl p-3">
+                <ul className="text-[11px] sm:text-xs my-1 list-none space-y-0.5 bg-gray-50 border border-gray-100 rounded-xl p-2">
                   {renderCondition(passwordStatus.length, 'Must have at least 8 characters')}
                   {renderCondition(passwordStatus.lowercase, 'Must contain a lowercase letter')}
                   {renderCondition(passwordStatus.uppercase, 'Must contain an uppercase letter')}
@@ -293,8 +293,8 @@ export default function Signup() {
 
               {/* Confirm Password */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Confirm Password</label>
-                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#3878c2]/50 focus-within:border-[#3878c2] transition-all">
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wide mb-1">Confirm Password</label>
+                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#3878c2]/50 focus-within:border-[#3878c2] transition-all">
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
@@ -328,7 +328,7 @@ export default function Signup() {
               )}
 
               {/* Terms and Conditions */}
-              <p className="text-xs text-gray-500 my-4 text-center leading-relaxed">
+              <p className="text-xs text-gray-500 my-2 text-center leading-relaxed">
                 By signing up, you agree to our <br />
                 <a href="#" className="font-bold text-[#4bad40] hover:underline">Terms and Conditions</a> and <a href="#" className="font-bold text-[#4bad40] hover:underline">Privacy Policy</a>
               </p>
@@ -337,7 +337,7 @@ export default function Signup() {
               <button
                 type="submit"
                 disabled={!isValid || isLoading}
-                className={`w-full py-3 sm:py-3.5 rounded-xl text-sm font-bold shadow-md transition-all duration-300 ${
+                className={`w-full py-2.5 sm:py-3 rounded-xl text-sm font-bold shadow-md transition-all duration-300 ${
                   isValid && !isLoading
                     ? 'bg-[#4bad40] text-white hover:bg-[#3f9136] hover:shadow-[#4bad40]/30 hover:-translate-y-0.5'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
@@ -348,7 +348,7 @@ export default function Signup() {
             </form>
 
             {/* Back to Login */}
-            <div className="mt-6 text-center border-t border-gray-100 pt-6">
+            <div className="mt-3 text-center border-t border-gray-100 pt-3">
                 <p className="text-sm font-medium text-gray-500">
                     Already have an account?{' '}
                     <button
