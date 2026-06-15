@@ -315,7 +315,7 @@ export default function RiderDashboard() {
     };
   }, []);
 
-  const [dashboardFilter, setDashboardFilter] = useState('All');
+  const [dashboardFilter, setDashboardFilter] = useState('Today');
 
   const categorizedTasks = useMemo(() => {
     const past = [];
