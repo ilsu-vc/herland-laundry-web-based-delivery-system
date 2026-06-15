@@ -248,25 +248,34 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
             setCollectionInfo({
               option: "pickedUpDelivered",
               optionLabel: "Pickup & Delivery",
-              date: data.collectionDetails.collectionDate,
-              time: data.collectionDetails.collectionTime,
-              collectionSlot: data.collectionDetails.collectionSlot || getSlotIdByValue(data.collectionDetails.collectionTime),
+              date: data.collectionDetails?.collectionDate || "",
+              time: data.collectionDetails?.collectionTime || "",
+              collectionSlot: data.collectionDetails?.collectionSlot || getSlotIdByValue(data.collectionDetails?.collectionTime || ""),
             });            
             setDeliveryInfo({
-              date: data.collectionDetails.deliveryDate,
-              time: data.collectionDetails.deliveryTime,
-              deliverySlot: data.collectionDetails.deliverySlot || getSlotIdByValue(data.collectionDetails.deliveryTime),
+              date: data.collectionDetails?.deliveryDate || "",
+              time: data.collectionDetails?.deliveryTime || "",
+              deliverySlot: data.collectionDetails?.deliverySlot || getSlotIdByValue(data.collectionDetails?.deliveryTime || ""),
             });
-            if (data.collectionDetails.lat && data.collectionDetails.lng) {
+            if (data.collectionDetails?.lat && data.collectionDetails?.lng) {
               setCustomerLocation({
-                address: data.collectionDetails.pickupAddress || data.collectionDetails.deliveryAddress,
+                address: data.collectionDetails?.pickupAddress || data.collectionDetails?.deliveryAddress || "",
                 lat: data.collectionDetails.lat,
+                lng: data.collectionDetails.lng,
               });
             }
-            setBookingLoaded(true);
+          } else {
+            showToast("Unable to load booking details.", "error");
+            if (onCancel) onCancel();
+            else navigate("/bookings");
           }
         } catch (err) {
           console.error("Error fetching booking for edit:", err);
+          showToast("Failed to load booking. Please try again.", "error");
+          if (onCancel) onCancel();
+          else navigate("/bookings");
+        } finally {
+          setBookingLoaded(true);
         }
       };
       fetchBooking();

@@ -230,6 +230,34 @@ export default function BookingDetails() {
       return;
     }
 
+    if (action.status === 'Rider Dispatched for Pickup') {
+      const collectionDateStr = booking.collectionDetails?.collectionDate || booking.collection_details?.collectionDate;
+      if (collectionDateStr) {
+        const collectionDate = new Date(collectionDateStr);
+        collectionDate.setHours(0,0,0,0);
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        if (today < collectionDate) {
+          showToast('Cannot dispatch rider before the scheduled collection date.', 'error');
+          return;
+        }
+      }
+    }
+
+    if (action.status === 'Out for Delivery') {
+      const deliveryDateStr = booking.collectionDetails?.deliveryDate || booking.collection_details?.deliveryDate;
+      if (deliveryDateStr) {
+        const deliveryDate = new Date(deliveryDateStr);
+        deliveryDate.setHours(0,0,0,0);
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        if (today < deliveryDate) {
+          showToast('Cannot dispatch rider before the scheduled delivery date.', 'error');
+          return;
+        }
+      }
+    }
+
     if (!(await confirm(`Are you sure you want to advance the status to "${action.status}"?`))) return;
 
     const payment = booking.paymentDetails || booking.payment_details || {};

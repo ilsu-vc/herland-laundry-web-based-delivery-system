@@ -482,6 +482,34 @@ export default function ManageBookings() {
       return;
     }
 
+    if (action.status === 'Rider Dispatched for Pickup') {
+      const collectionDateStr = booking.collectionDetails?.collectionDate || booking.collection_details?.collectionDate;
+      if (collectionDateStr) {
+        const collectionDate = new Date(collectionDateStr);
+        collectionDate.setHours(0,0,0,0);
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        if (today < collectionDate) {
+          alert('Cannot dispatch rider before the scheduled collection date.');
+          return;
+        }
+      }
+    }
+
+    if (action.status === 'Out for Delivery') {
+      const deliveryDateStr = booking.collectionDetails?.deliveryDate || booking.collection_details?.deliveryDate;
+      if (deliveryDateStr) {
+        const deliveryDate = new Date(deliveryDateStr);
+        deliveryDate.setHours(0,0,0,0);
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        if (today < deliveryDate) {
+          alert('Cannot dispatch rider before the scheduled delivery date.');
+          return;
+        }
+      }
+    }
+
     const payment = booking.paymentDetails || {};
     const paymentMethod = payment.method || 'GCash';
 
