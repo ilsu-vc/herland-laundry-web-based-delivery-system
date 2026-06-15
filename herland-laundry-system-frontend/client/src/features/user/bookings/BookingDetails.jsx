@@ -131,11 +131,13 @@ export default function BookingDetails() {
       setEditTimeLeft(remaining);
 
       if (remaining <= 0 && !editWarningShown.current) {
-        editWarningShown.current = true;
-        showToast(
-          "⚠️ The 15-minute editing window has expired. You can no longer edit this booking.",
-          "error"
-        );
+        if (!isAdminOrStaff) {
+          editWarningShown.current = true;
+          showToast(
+            "⚠️ The 15-minute editing window has expired. You can no longer edit this booking.",
+            "error"
+          );
+        }
       }
     };
 
@@ -150,7 +152,7 @@ export default function BookingDetails() {
     return `${m}:${String(s).padStart(2, "0")}`;
   };
 
-  const isEditWindowOpen = editTimeLeft !== null && editTimeLeft > 0;
+  const isEditWindowOpen = isAdminOrStaff || (editTimeLeft !== null && editTimeLeft > 0);
   // ─────────────────────────────────────────────────────────────────────────
 
   const handleCancel = async () => {
@@ -440,12 +442,12 @@ export default function BookingDetails() {
                   }`}
                 >
                   Edit
-                  {editTimeLeft !== null && editTimeLeft > 0 && (
+                  {!isAdminOrStaff && editTimeLeft !== null && editTimeLeft > 0 && (
                     <span className="text-[10px] font-mono bg-[#3878c2]/10 text-[#3878c2] px-1.5 py-0.5 rounded">
                       {formatCountdown(editTimeLeft)}
                     </span>
                   )}
-                  {editTimeLeft !== null && editTimeLeft <= 0 && (
+                  {!isAdminOrStaff && editTimeLeft !== null && editTimeLeft <= 0 && (
                     <span className="text-[10px] font-mono bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded">
                       Expired
                     </span>

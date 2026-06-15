@@ -631,7 +631,8 @@ function ReportsContent({ bookings }) {
       }
     });
 
-    return Array.from(map.values());
+    // Reverse the final array so it displays chronologically from left to right
+    return Array.from(map.values()).reverse();
   }, [filteredBookings, period, report]);
 
   const pieData = useMemo(() => {
