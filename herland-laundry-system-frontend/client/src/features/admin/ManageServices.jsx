@@ -273,6 +273,7 @@ export default function ManageServices() {
     question: '',
     answer: '',
   });
+  const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
@@ -809,6 +810,7 @@ export default function ManageServices() {
         question: '',
         answer: '',
       });
+      setIsFaqModalOpen(false);
       setEditingFaqId(null);
     } catch (error) {
       setFetchError(error.message || 'Unable to save FAQ.');
@@ -823,6 +825,7 @@ export default function ManageServices() {
       question: faq.question,
       answer: faq.answer,
     });
+    setIsFaqModalOpen(true);
   };
 
   const handleCancelFaqEdit = () => {
@@ -831,6 +834,7 @@ export default function ManageServices() {
       question: '',
       answer: '',
     });
+    setIsFaqModalOpen(false);
   };
 
   const handleDeleteFaq = async (faq) => {
@@ -1264,72 +1268,74 @@ export default function ManageServices() {
         </div>
       </div>
 
-      <SectionLabel>FAQs</SectionLabel>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <SectionLabel style={{ marginBottom: 0 }}>FAQs</SectionLabel>
+        <button
+          type="button"
+          onClick={() => {
+            setEditingFaqId(null);
+            setFaqDraft({ question: '', answer: '' });
+            setIsFaqModalOpen(true);
+          }}
+          style={{
+            padding: '7px 16px',
+            borderRadius: '0.625rem',
+            background: Colors.blue,
+            color: Colors.white,
+            fontSize: '0.875rem',
+            fontWeight: 800,
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          Add FAQ
+        </button>
+      </div>
 
-      <div
-        style={{
-          ...card,
-          padding: '1.25rem',
-          marginBottom: 20,
-        }}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Question">
-            <input
-              value={faqDraft.question}
-              onChange={(event) =>
-                setFaqDraft((prev) => ({ ...prev, question: event.target.value }))
-              }
-              placeholder="Enter FAQ question"
-              style={{
-                width: '100%',
-                border: `1px solid ${Colors.border}`,
-                borderRadius: '0.75rem',
-                padding: '0.75rem 0.85rem',
-                outline: 'none',
-              }}
-            />
-          </Field>
+      {isFaqModalOpen && (
+        <Modal
+          title={editingFaqId ? 'Edit FAQ' : 'Add FAQ'}
+          onClose={handleCancelFaqEdit}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Field label="Question">
+              <input
+                value={faqDraft.question}
+                onChange={(event) =>
+                  setFaqDraft((prev) => ({ ...prev, question: event.target.value }))
+                }
+                placeholder="Enter FAQ question"
+                style={{
+                  width: '100%',
+                  border: `1px solid ${Colors.border}`,
+                  borderRadius: '0.75rem',
+                  padding: '0.75rem 0.85rem',
+                  outline: 'none',
+                }}
+              />
+            </Field>
 
-          <Field label="Answer">
-            <input
-              value={faqDraft.answer}
-              onChange={(event) =>
-                setFaqDraft((prev) => ({ ...prev, answer: event.target.value }))
-              }
-              placeholder="Enter FAQ answer"
-              style={{
-                width: '100%',
-                border: `1px solid ${Colors.border}`,
-                borderRadius: '0.75rem',
-                padding: '0.75rem 0.85rem',
-                outline: 'none',
-              }}
-            />
-          </Field>
-        </div>
+            <Field label="Answer">
+              <textarea
+                value={faqDraft.answer}
+                onChange={(event) =>
+                  setFaqDraft((prev) => ({ ...prev, answer: event.target.value }))
+                }
+                placeholder="Enter FAQ answer"
+                rows={4}
+                style={{
+                  width: '100%',
+                  border: `1px solid ${Colors.border}`,
+                  borderRadius: '0.75rem',
+                  padding: '0.75rem 0.85rem',
+                  outline: 'none',
+                  resize: 'vertical',
+                }}
+              />
+            </Field>
+          </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={handleSaveFaq}
-            disabled={savingFaq}
-            style={{
-              padding: '9px 22px',
-              borderRadius: '0.75rem',
-              background: Colors.blue,
-              color: Colors.white,
-              fontSize: '0.875rem',
-              fontWeight: 800,
-              border: 'none',
-              cursor: savingFaq ? 'not-allowed' : 'pointer',
-              opacity: savingFaq ? 0.7 : 1,
-            }}
-          >
-            {savingFaq ? 'Saving...' : editingFaqId ? 'Update FAQ' : 'Add FAQ'}
-          </button>
-
-          {editingFaqId && (
+          <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
             <button
               type="button"
               onClick={handleCancelFaqEdit}
@@ -1346,9 +1352,27 @@ export default function ManageServices() {
             >
               Cancel
             </button>
-          )}
-        </div>
-      </div>
+            <button
+              type="button"
+              onClick={handleSaveFaq}
+              disabled={savingFaq}
+              style={{
+                padding: '9px 22px',
+                borderRadius: '0.75rem',
+                background: Colors.blue,
+                color: Colors.white,
+                fontSize: '0.875rem',
+                fontWeight: 800,
+                border: 'none',
+                cursor: savingFaq ? 'not-allowed' : 'pointer',
+                opacity: savingFaq ? 0.7 : 1,
+              }}
+            >
+              {savingFaq ? 'Saving...' : editingFaqId ? 'Update FAQ' : 'Add FAQ'}
+            </button>
+          </div>
+        </Modal>
+      )}
 
       <div style={{ display: 'grid', gap: 12, marginBottom: 32 }}>
         {faqs.map((faq, index) => (

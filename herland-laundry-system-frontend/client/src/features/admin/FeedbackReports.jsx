@@ -756,7 +756,9 @@ export default function FeedbackReports() {
       const riderProfile = profileMap.get(booking?.rider_id);
 
       const customerName = getDisplayName(customerProfile, 'Unknown Customer');
-      const riderName = getDisplayName(riderProfile, 'No rider assigned');
+      const riderName = booking?.rider_id 
+        ? getDisplayName(riderProfile, 'Unknown Rider') 
+        : 'No rider assigned';
 
       grouped.set(item.booking_id, {
         id: `booking-${item.booking_id}`,
@@ -781,7 +783,9 @@ export default function FeedbackReports() {
       const riderProfile = profileMap.get(item.rider_id || booking?.rider_id);
       const customerProfile = profileMap.get(booking?.user_id);
 
-      const riderName = getDisplayName(riderProfile, 'Unknown Rider');
+      const riderName = (item.rider_id || booking?.rider_id)
+        ? getDisplayName(riderProfile, 'Unknown Rider')
+        : 'No rider assigned';
       const customerName = getDisplayName(customerProfile, 'Unknown Customer');
 
       const existing = grouped.get(item.booking_id);
@@ -792,7 +796,9 @@ export default function FeedbackReports() {
         referenceNumber: existing?.referenceNumber || booking?.reference_number || `Booking #${item.booking_id}`,
         customerName: existing?.customerName || customerName,
         initials: existing?.initials || getInitials(customerName),
-        riderName: existing?.riderName || riderName,
+        riderName: (existing?.riderName && existing.riderName !== 'No rider assigned' && existing.riderName !== 'Unknown Rider') 
+          ? existing.riderName 
+          : riderName,
         service: existing?.service || getServiceText(booking),
         addOns: existing?.addOns || getAddOnsText(booking),
         laundryRating: existing?.laundryRating || 0,

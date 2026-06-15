@@ -560,6 +560,20 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
             }
         }
 
+        if (type === 'load' && isNaN(parseInt(id))) {
+            const { error: insertError } = await supabase
+                .from('service_items')
+                .insert({
+                    type: 'load',
+                    name: JSON.stringify({ label, sublabel, description, isEnabled }),
+                    current_price: Number(currentPrice),
+                    sort_order: 99
+                });
+            if (insertError) throw insertError;
+            
+            return res.json({ message: 'Item inserted successfully' });
+        }
+
         const { error, data } = await supabase
             .from('service_items')
             .update(updateData)
@@ -568,24 +582,6 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
 
         if (error) throw error;
         
-        // If it doesn't exist yet and it's a load type (because it was hardcoded), insert it!
-        if (!data || data.length === 0) {
-            if (type === 'load') {
-                const { error: insertError } = await supabase
-                    .from('service_items')
-                    .insert({
-                        id,
-                        type: 'load',
-                        name: JSON.stringify({ label, sublabel, description, isEnabled }),
-                        current_price: Number(currentPrice),
-                        sort_order: 99
-                    });
-                if (insertError) throw insertError;
-            } else {
-                 throw new Error("Item not found");
-            }
-        }
-
         res.json({ message: 'Item updated successfully' });
     } catch (error) {
         console.error('Update Service Item Error:', error.message);

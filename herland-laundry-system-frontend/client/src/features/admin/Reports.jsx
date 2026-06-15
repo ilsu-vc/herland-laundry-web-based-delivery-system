@@ -631,8 +631,19 @@ function ReportsContent({ bookings }) {
       }
     });
 
-    // Reverse the final array so it displays chronologically from left to right
-    return Array.from(map.values()).reverse();
+    // Ensure chronological order
+    const finalArray = Array.from(map.values());
+    
+    if (period === 'weekly') {
+      return finalArray.sort((a, b) => {
+        const numA = parseInt(a.label.replace('Week ', '')) || 0;
+        const numB = parseInt(b.label.replace('Week ', '')) || 0;
+        return numA - numB;
+      });
+    }
+
+    // Default reverse for monthly/yearly (since insertion is newest-first)
+    return finalArray.reverse();
   }, [filteredBookings, period, report]);
 
   const pieData = useMemo(() => {

@@ -827,6 +827,11 @@ function StepSelectServices({
   }
 
   const handleNextSubmit = () => {
+    if (selectedLoads.length === 0) {
+      setServiceError("Please select at least one Load Type to continue.");
+      return;
+    }
+
     const hasService = Object.values(services).some(val => val > 0);
     if (!hasService) {
       setServiceError("Please select at least one laundry service to continue.");
@@ -2019,9 +2024,7 @@ function StepReview({
       quantity: Number(loadQuantities[option.id] || 1),
     }));
 
-  const fallbackLaundryRows = selectedLoadOptions.length > 0
-    ? selectedLoadOptions
-    : [{ id: 'regular', label: 'Regular Light Mix', price: 220, quantity: Number(numberOfBags) || 1 }];
+  const fallbackLaundryRows = selectedLoadOptions;
 
   const calculateTotal = () => {
     return fallbackLaundryRows.reduce(
