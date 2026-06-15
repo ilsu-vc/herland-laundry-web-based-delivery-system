@@ -268,14 +268,14 @@ export default function ManageBookings() {
 
   const [yearInput, setYearInput] = useState('');
   const [monthInput, setMonthInput] = useState('');
-  const [dateFrom, setDateFrom] = useState(getTodayString());
-  const [dateTo, setDateTo] = useState(getTodayString());
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // applied values
   const [appliedYear, setAppliedYear] = useState('');
   const [appliedMonth, setAppliedMonth] = useState('');
-  const [appliedFrom, setAppliedFrom] = useState(getTodayString());
-  const [appliedTo, setAppliedTo] = useState(getTodayString());
+  const [appliedFrom, setAppliedFrom] = useState('');
+  const [appliedTo, setAppliedTo] = useState('');
 
   const selectedStatusLabel =
     STATUS_FILTER_OPTIONS.find((option) => option.value === statusFilter)?.label || 'Booking Received';
