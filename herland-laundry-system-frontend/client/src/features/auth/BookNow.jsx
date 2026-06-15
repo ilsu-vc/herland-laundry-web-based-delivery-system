@@ -671,6 +671,8 @@ function StepSelectServices({
   availableLoads,
   isEditMode = false,
 }) {
+  const currentUserId = localStorage.getItem('currentUserId') || 'guest';
+
   const loadOptions = (() => {
     const validLoads = availableLoads.filter(load => load.isEnabled !== false);
     return validLoads.length > 0 ? validLoads : [
