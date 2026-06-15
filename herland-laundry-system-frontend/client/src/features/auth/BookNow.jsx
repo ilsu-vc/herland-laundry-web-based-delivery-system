@@ -23,17 +23,19 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   const isEditMode = !!editId;
   const [bookingLoaded, setBookingLoaded] = useState(!isEditMode);
   
+  const currentUserId = localStorage.getItem('currentUserId') || 'guest';
+
   const [step, setStep] = useState(() => {
     if (isEditMode) return 1;
-    const saved = localStorage.getItem('bookingStep');
+    const saved = localStorage.getItem(`${currentUserId}_bookingStep`);
     return saved ? parseInt(saved, 10) : 1;
   });
 
   // Helper to read JSON from localStorage
-  const getLocalItem = (key, defaultVal) => {
+  const getLocalItem = (baseKey, defaultVal) => {
     if (isEditMode) return defaultVal;
     try {
-      const item = localStorage.getItem(key);
+      const item = localStorage.getItem(`${currentUserId}_${baseKey}`);
       return item ? JSON.parse(item) : defaultVal;
     } catch {
       return defaultVal;
@@ -42,18 +44,18 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
 
   // Clear localStorage when booking is completed successfully
   const clearBookingState = () => {
-    localStorage.removeItem('bookingStep');
-    localStorage.removeItem('bookingServices');
-    localStorage.removeItem('bookingWeight');
-    localStorage.removeItem('bookingPaymentMethod');
-    localStorage.removeItem('bookingNumberOfBags');
-    localStorage.removeItem('bookingBagDescription');
-    localStorage.removeItem('bookingNotes');
-    localStorage.removeItem('bookingCollectionInfo');
-    localStorage.removeItem('bookingDeliveryInfo');
-    localStorage.removeItem('bookingCustomerLocation');
-    localStorage.removeItem('bookingSelectedLoad');
-    localStorage.removeItem('bookingLoadQuantities');
+    localStorage.removeItem(`${currentUserId}_bookingStep`);
+    localStorage.removeItem(`${currentUserId}_bookingServices`);
+    localStorage.removeItem(`${currentUserId}_bookingWeight`);
+    localStorage.removeItem(`${currentUserId}_bookingPaymentMethod`);
+    localStorage.removeItem(`${currentUserId}_bookingNumberOfBags`);
+    localStorage.removeItem(`${currentUserId}_bookingBagDescription`);
+    localStorage.removeItem(`${currentUserId}_bookingNotes`);
+    localStorage.removeItem(`${currentUserId}_bookingCollectionInfo`);
+    localStorage.removeItem(`${currentUserId}_bookingDeliveryInfo`);
+    localStorage.removeItem(`${currentUserId}_bookingCustomerLocation`);
+    localStorage.removeItem(`${currentUserId}_bookingSelectedLoad`);
+    localStorage.removeItem(`${currentUserId}_bookingLoadQuantities`);
   };
 
   // Auth Check
@@ -71,7 +73,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   const [services, setServices] = useState(() => getLocalItem('bookingServices', {}));
   const [weight, setWeight] = useState(() => {
     if (isEditMode) return 0;
-    const saved = localStorage.getItem('bookingWeight');
+    const saved = localStorage.getItem(`${currentUserId}_bookingWeight`);
     return saved ? parseFloat(saved) : 0;
   });
   const [availableServices, setAvailableServices] = useState([]);
@@ -79,20 +81,20 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   const [loadingServices, setLoadingServices] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState(() => {
     if (isEditMode) return "gcash";
-    return localStorage.getItem('bookingPaymentMethod') || "gcash";
+    return localStorage.getItem(`${currentUserId}_bookingPaymentMethod`) || "gcash";
   });
   const [numberOfBags, setNumberOfBags] = useState(() => {
     if (isEditMode) return 1;
-    const saved = localStorage.getItem('bookingNumberOfBags');
+    const saved = localStorage.getItem(`${currentUserId}_bookingNumberOfBags`);
     return saved ? parseInt(saved, 10) : 1;
   });
   const [bagDescription, setBagDescription] = useState(() => {
     if (isEditMode) return "";
-    return localStorage.getItem('bookingBagDescription') || "";
+    return localStorage.getItem(`${currentUserId}_bookingBagDescription`) || "";
   });
   const [notes, setNotes] = useState(() => {
     if (isEditMode) return "";
-    return localStorage.getItem('bookingNotes') || "";
+    return localStorage.getItem(`${currentUserId}_bookingNotes`) || "";
   });
   const { setHideBottomNav } = useLayout();
   const { requestLocationPermission } = usePermissions();
@@ -115,18 +117,18 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
   // Save all booking state to localStorage
   useEffect(() => {
     if (!isEditMode) {
-      localStorage.setItem('bookingStep', step.toString());
-      localStorage.setItem('bookingServices', JSON.stringify(services));
-      localStorage.setItem('bookingWeight', weight.toString());
-      localStorage.setItem('bookingPaymentMethod', paymentMethod);
-      localStorage.setItem('bookingNumberOfBags', numberOfBags.toString());
-      localStorage.setItem('bookingBagDescription', bagDescription);
-      localStorage.setItem('bookingNotes', notes);
-      localStorage.setItem('bookingCollectionInfo', JSON.stringify(collectionInfo));
-      localStorage.setItem('bookingDeliveryInfo', JSON.stringify(deliveryInfo));
-      localStorage.setItem('bookingCustomerLocation', JSON.stringify(customerLocation));
+      localStorage.setItem(`${currentUserId}_bookingStep`, step.toString());
+      localStorage.setItem(`${currentUserId}_bookingServices`, JSON.stringify(services));
+      localStorage.setItem(`${currentUserId}_bookingWeight`, weight.toString());
+      localStorage.setItem(`${currentUserId}_bookingPaymentMethod`, paymentMethod);
+      localStorage.setItem(`${currentUserId}_bookingNumberOfBags`, numberOfBags.toString());
+      localStorage.setItem(`${currentUserId}_bookingBagDescription`, bagDescription);
+      localStorage.setItem(`${currentUserId}_bookingNotes`, notes);
+      localStorage.setItem(`${currentUserId}_bookingCollectionInfo`, JSON.stringify(collectionInfo));
+      localStorage.setItem(`${currentUserId}_bookingDeliveryInfo`, JSON.stringify(deliveryInfo));
+      localStorage.setItem(`${currentUserId}_bookingCustomerLocation`, JSON.stringify(customerLocation));
     }
-  }, [step, services, weight, paymentMethod, numberOfBags, bagDescription, notes, collectionInfo, deliveryInfo, customerLocation, isEditMode]);
+  }, [step, services, weight, paymentMethod, numberOfBags, bagDescription, notes, collectionInfo, deliveryInfo, customerLocation, isEditMode, currentUserId]);
   const [saveHomeAddress, setSaveHomeAddress] = useState(true);
 
   const { isLoaded: isMapLoaded } = useJsApiLoader({
@@ -243,8 +245,8 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
               heavy: 1,
               perPiece: 1,
             };
-            localStorage.setItem('bookingSelectedLoad', JSON.stringify(storedSelectedLoads));
-            localStorage.setItem('bookingLoadQuantities', JSON.stringify(storedLoadQuantities));
+            localStorage.setItem(`${currentUserId}_bookingSelectedLoad`, JSON.stringify(storedSelectedLoads));
+            localStorage.setItem(`${currentUserId}_bookingLoadQuantities`, JSON.stringify(storedLoadQuantities));
             setCollectionInfo({
               option: "pickedUpDelivered",
               optionLabel: "Pickup & Delivery",
@@ -696,9 +698,9 @@ function StepSelectServices({
     ];
   })();
 
-  const getStoredValue = (key, fallback) => {
+  const getStoredValue = (baseKey, fallback) => {
     try {
-      const stored = localStorage.getItem(key);
+      const stored = localStorage.getItem(`${currentUserId}_${baseKey}`);
       return stored ? JSON.parse(stored) : fallback;
     } catch {
       return fallback;
@@ -778,11 +780,11 @@ function StepSelectServices({
   };
 
   useEffect(() => {
-    localStorage.setItem('bookingSelectedLoad', JSON.stringify(selectedLoads));
+    localStorage.setItem(`${currentUserId}_bookingSelectedLoad`, JSON.stringify(selectedLoads));
   }, [selectedLoads]);
 
   useEffect(() => {
-    localStorage.setItem('bookingLoadQuantities', JSON.stringify(loadQuantities));
+    localStorage.setItem(`${currentUserId}_bookingLoadQuantities`, JSON.stringify(loadQuantities));
   }, [loadQuantities]);
 
   useEffect(() => {
@@ -2015,9 +2017,11 @@ function StepReview({
     { id: 'perPiece', label: 'Per Piece', price: 220 },
   ];
 
-  const getStoredValue = (key, fallback) => {
+  const currentUserId = localStorage.getItem('currentUserId') || 'guest';
+
+  const getStoredValue = (baseKey, fallback) => {
     try {
-      const stored = localStorage.getItem(key);
+      const stored = localStorage.getItem(`${currentUserId}_${baseKey}`);
       return stored ? JSON.parse(stored) : fallback;
     } catch {
       return fallback;

@@ -405,6 +405,8 @@ export default function Sidebar({
     setUnreadCount(0);
     setActiveItemKey('');
 
+    window.localStorage.removeItem('currentUserId');
+
     navigate('/login');
     onClose();
   }

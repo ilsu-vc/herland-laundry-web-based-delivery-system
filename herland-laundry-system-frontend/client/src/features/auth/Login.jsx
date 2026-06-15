@@ -131,6 +131,7 @@ export default function Login() {
 
             const role = profile?.role || 'Customer';
             window.sessionStorage.setItem('activeRole', role);
+            window.localStorage.setItem('currentUserId', userId);
 
             if (role === 'Admin') navigate('/admin');
             else if (role === 'Staff') navigate('/staff');
@@ -171,6 +172,7 @@ export default function Login() {
 
       // Store role for the route switcher
       window.sessionStorage.setItem('activeRole', role);
+      window.localStorage.setItem('currentUserId', userId);
 
       // Redirect based on role
       if (role === 'Admin') navigate('/admin');
