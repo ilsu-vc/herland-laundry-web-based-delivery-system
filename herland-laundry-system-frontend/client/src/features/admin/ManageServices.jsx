@@ -539,6 +539,10 @@ export default function ManageServices() {
           throw new Error('Unable to update load type.');
         }
 
+        const responseData = await response.json();
+        const actualId = responseData.newId || updatedLoad.id;
+        updatedLoad.id = actualId; // ensure it uses the db numeric id
+
         setLoadOptions((prev) =>
           prev.map((item) => (item.id === editItem.oldId ? updatedLoad : item))
         );
@@ -667,10 +671,21 @@ export default function ManageServices() {
         throw new Error('Unable to toggle load type status.');
       }
 
-      setLoadEnabled((prev) => ({
-        ...prev,
-        [opt.id]: nextEnabled,
-      }));
+      const responseData = await response.json();
+      const actualId = responseData.newId || opt.id;
+
+      setLoadEnabled((prev) => {
+        const newPrev = { ...prev };
+        if (responseData.newId) {
+            delete newPrev[opt.id];
+        }
+        newPrev[actualId] = nextEnabled;
+        return newPrev;
+      });
+
+      if (responseData.newId) {
+          setLoadOptions((prev) => prev.map(item => item.id === opt.id ? { ...item, id: actualId } : item));
+      }
       
       addHistory(`Load type ${nextEnabled ? 'enabled' : 'disabled'}`, `${opt.label} was ${nextEnabled ? 'enabled' : 'disabled'}.`);
       showSuccess(`Load type ${nextEnabled ? 'enabled' : 'disabled'} successfully.`);

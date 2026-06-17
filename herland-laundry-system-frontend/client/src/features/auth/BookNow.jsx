@@ -673,32 +673,7 @@ function StepSelectServices({
 }) {
   const currentUserId = localStorage.getItem('currentUserId') || 'guest';
 
-  const loadOptions = (() => {
-    const validLoads = availableLoads.filter(load => load.isEnabled !== false);
-    return validLoads.length > 0 ? validLoads : [
-      {
-        id: 'regular',
-        label: 'Regular Light Mix',
-        sublabel: 'Up to 7.5 kg',
-        description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.',
-        price: 220,
-      },
-      {
-        id: 'heavy',
-        label: 'Heavy Load',
-        sublabel: 'Up to 5 kg',
-        description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.',
-        price: 220,
-      },
-      {
-        id: 'perPiece',
-        label: 'Per Piece',
-        sublabel: '₱220 per item',
-        description: 'Comforter, Duvet, Pillow, etc.',
-        price: 220,
-      },
-    ];
-  })();
+  const loadOptions = availableLoads;
 
   const getStoredValue = (baseKey, fallback) => {
     try {
@@ -905,48 +880,70 @@ function StepSelectServices({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {loadOptions.map(option => {
                 const active = selectedLoads.includes(option.id);
+                const isDisabled = option.isEnabled === false;
 
                 return (
                   <div
                     key={option.id}
-                    onClick={() => toggleLoadType(option.id)}
+                    onClick={() => !isDisabled && toggleLoadType(option.id)}
                     style={{
-                      background: '#fff',
-                      border: `2px solid ${active ? '#3878c2' : 'rgba(99,188,230,0.22)'}`,
+                      background: isDisabled ? '#f3f4f6' : '#fff',
+                      border: `2px solid ${isDisabled ? '#e5e7eb' : active ? '#3878c2' : 'rgba(99,188,230,0.22)'}`,
                       borderRadius: '0.875rem',
                       padding: '1rem 1.25rem',
-                      cursor: 'pointer',
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 14,
-                      boxShadow: active
-                        ? '0 2px 12px rgba(56,120,194,0.12)'
-                        : '0 1px 4px rgba(56,120,194,0.04)',
+                      boxShadow: isDisabled
+                        ? 'none'
+                        : active
+                          ? '0 2px 12px rgba(56,120,194,0.12)'
+                          : '0 1px 4px rgba(56,120,194,0.04)',
                       transition: 'border-color 0.15s, box-shadow 0.15s',
+                      opacity: isDisabled ? 0.65 : 1,
+                      position: 'relative',
                     }}
                   >
                     <input
                       type="checkbox"
                       checked={active}
-                      onChange={() => toggleLoadType(option.id)}
+                      disabled={isDisabled}
+                      onChange={() => !isDisabled && toggleLoadType(option.id)}
                       onClick={event => event.stopPropagation()}
-                      style={{ width: 18, height: 18, accentColor: '#3878c2', flexShrink: 0 }}
+                      style={{ width: 18, height: 18, accentColor: '#3878c2', flexShrink: 0, cursor: isDisabled ? 'not-allowed' : 'pointer' }}
                     />
 
                     <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 600, fontSize: '0.9375rem', color: active ? '#1f2937' : '#374151' }}>
-                        {option.label}
-                      </p>
-                      <p style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#6b7280', marginTop: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <p style={{ fontWeight: 600, fontSize: '0.9375rem', color: isDisabled ? '#9ca3af' : active ? '#1f2937' : '#374151' }}>
+                          {option.label}
+                        </p>
+                        {isDisabled && (
+                          <span style={{
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            letterSpacing: '0.05em',
+                            color: '#9ca3af',
+                            background: '#e5e7eb',
+                            borderRadius: '999px',
+                            padding: '2px 9px',
+                            textTransform: 'uppercase',
+                          }}>
+                            Unavailable
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: '0.8125rem', fontWeight: 400, color: isDisabled ? '#9ca3af' : '#6b7280', marginTop: 1 }}>
                         {option.sublabel}
                       </p>
-                      <p style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#6b7280', marginTop: 2 }}>
+                      <p style={{ fontSize: '0.8125rem', fontWeight: 400, color: isDisabled ? '#9ca3af' : '#6b7280', marginTop: 2 }}>
                         {option.description}
                       </p>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {active ? (
+                      {!isDisabled && active ? (
                         <>
                           <button
                             type="button"
@@ -991,8 +988,8 @@ function StepSelectServices({
                           </button>
                         </>
                       ) : (
-                        <span style={{ fontSize: '0.8125rem', color: '#d1d5db', fontWeight: 500 }}>
-                          Qty: 0
+                        <span style={{ fontSize: '0.8125rem', color: isDisabled ? '#d1d5db' : '#d1d5db', fontWeight: 500 }}>
+                          {isDisabled ? '' : 'Qty: 0'}
                         </span>
                       )}
                     </div>
@@ -2013,11 +2010,7 @@ function StepReview({
   const [paymentReference, setPaymentReference] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loadOptions = availableLoads.length > 0 ? availableLoads : [
-    { id: 'regular', label: 'Regular Light Mix', price: 220 },
-    { id: 'heavy', label: 'Heavy Load', price: 220 },
-    { id: 'perPiece', label: 'Per Piece', price: 220 },
-  ];
+  const loadOptions = availableLoads;
 
   const currentUserId = localStorage.getItem('currentUserId') || 'guest';
 

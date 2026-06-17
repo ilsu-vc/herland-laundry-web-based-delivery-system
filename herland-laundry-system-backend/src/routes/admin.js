@@ -422,7 +422,7 @@ router.get('/services', verifyRole('Admin'), async (req, res) => {
         if (schedError) throw schedError;
 
         const services = (items || [])
-            .filter(i => i.type === 'service')
+            .filter(i => i.type === 'service' && !i.name.includes('"isLoad":true'))
             .map(i => ({
                 id: i.id,
                 name: i.name,
@@ -442,7 +442,7 @@ router.get('/services', verifyRole('Admin'), async (req, res) => {
             }));
 
         let loadOptions = (items || [])
-            .filter(i => i.type === 'load')
+            .filter(i => i.name && i.name.includes('"isLoad":true'))
             .map(i => {
                 try {
                     const parsed = JSON.parse(i.name);
@@ -550,7 +550,7 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
         
         if (type === 'load') {
              // For loads, we encode the label, sublabel, and description into the `name` column
-             updateData.name = JSON.stringify({ label, sublabel, description, isEnabled });
+             updateData.name = JSON.stringify({ label, sublabel, description, isEnabled, isLoad: true });
         } else {
             if (previousPrice !== undefined) {
                 updateData.previous_price = previousPrice !== null ? Number(previousPrice) : null;
@@ -561,17 +561,24 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
         }
 
         if (type === 'load' && isNaN(parseInt(id))) {
-            const { error: insertError } = await supabase
+            const { data: newRow, error: insertError } = await supabase
                 .from('service_items')
                 .insert({
-                    type: 'load',
-                    name: JSON.stringify({ label, sublabel, description, isEnabled }),
+                    type: 'service',
+                    name: JSON.stringify({ label, sublabel, description, isEnabled, isLoad: true }),
                     current_price: Number(currentPrice),
+                    previous_price: null,
+                    estimated_hours: 0,
                     sort_order: 99
-                });
-            if (insertError) throw insertError;
+                })
+                .select()
+                .single();
+            if (insertError) {
+                require('fs').writeFileSync('C:\\\\Users\\\\DELL\\\\Documents\\\\new se2\\\\herland-laundry-system\\\\herland-laundry-system-backend\\\\error.log', JSON.stringify(insertError, null, 2));
+                throw insertError;
+            }
             
-            return res.json({ message: 'Item inserted successfully' });
+            return res.json({ message: 'Item inserted successfully', newId: newRow.id });
         }
 
         const { error, data } = await supabase

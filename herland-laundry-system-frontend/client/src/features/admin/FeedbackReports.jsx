@@ -654,7 +654,7 @@ function FeedbackCard({ record }) {
           />
 
           <RatingSection
-            title="Rider Feedback"
+            title={`Rider Feedback - ${record.riderName}`}
             rating={record.riderRating}
             tags={record.riderTags}
           />

@@ -28,7 +28,7 @@ router.get('/services', async (req, res) => {
         if (schedError) throw schedError;
 
         const services = (items || [])
-            .filter(i => i.type === 'service')
+            .filter(i => i.type === 'service' && !i.name.includes('"isLoad":true'))
             .map(i => ({
                 id: i.id,
                 name: i.name,
@@ -46,7 +46,7 @@ router.get('/services', async (req, res) => {
             }));
 
         let loadOptions = (items || [])
-            .filter(i => i.type === 'load')
+            .filter(i => i.name && i.name.includes('"isLoad":true'))
             .map(i => {
                 try {
                     const parsed = JSON.parse(i.name);
@@ -56,14 +56,16 @@ router.get('/services', async (req, res) => {
                         sublabel: parsed.sublabel || '',
                         description: parsed.description || '',
                         price: Number(i.current_price),
+                        isEnabled: parsed.isEnabled,
                     };
                 } catch (e) {
                     return null;
                 }
             })
-            .filter(Boolean);
+            .filter(i => i !== null);
 
-        if (loadOptions.length === 0) {
+        const hasDbLoads = (items || []).some(i => i.name && i.name.includes('"isLoad":true'));
+        if (!hasDbLoads) {
             loadOptions = [
                 { id: 'regular', label: 'Regular Light Mix', sublabel: 'Up to 7.5 kg', description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.', price: 220 },
                 { id: 'heavy', label: 'Heavy Load', sublabel: 'Up to 5 kg', description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.', price: 220 },
