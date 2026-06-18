@@ -560,7 +560,29 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
             }
         }
 
+        // If the ID is a fallback string (not a real UUID), find the existing row by label first
         if (type === 'load' && ['heavy', 'regular', 'perPiece'].includes(id)) {
+            // Search for an existing load with this label in the DB
+            const { data: existingRows } = await supabase
+                .from('service_items')
+                .select('*')
+                .eq('type', 'service')
+                .like('name', `%"isLoad":true%`)
+                .like('name', `%"label":"${label}"%`);
+
+            if (existingRows && existingRows.length > 0) {
+                // Update the FIRST matching row (use its real UUID)
+                const realId = existingRows[0].id;
+                const { error: updateError } = await supabase
+                    .from('service_items')
+                    .update(updateData)
+                    .eq('id', realId);
+
+                if (updateError) throw updateError;
+                return res.json({ message: 'Item updated successfully', newId: realId });
+            }
+
+            // No existing row found — insert one
             const { data: newRow, error: insertError } = await supabase
                 .from('service_items')
                 .insert({
@@ -573,19 +595,16 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
                 })
                 .select()
                 .single();
-            if (insertError) {
-                require('fs').writeFileSync('C:\\\\Users\\\\DELL\\\\Documents\\\\new se2\\\\herland-laundry-system\\\\herland-laundry-system-backend\\\\error.log', JSON.stringify(insertError, null, 2));
-                throw insertError;
-            }
-            
+
+            if (insertError) throw insertError;
             return res.json({ message: 'Item inserted successfully', newId: newRow.id });
         }
 
-        const { error, data } = await supabase
+        // Standard update path for real UUID IDs
+        const { error } = await supabase
             .from('service_items')
             .update(updateData)
-            .eq('id', id)
-            .select();
+            .eq('id', id);
 
         if (error) throw error;
         
