@@ -634,7 +634,14 @@ router.patch('/my-bookings/:id/update', requireAuth, async (req, res) => {
     } = req.body;
 
     try {
-        const booking = await getBookingByIdOrRef(id, req.user.id);
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', req.user.id)
+            .maybeSingle();
+
+        const hasBypass = profile?.role === 'Admin' || profile?.role === 'Staff';
+        const booking = await getBookingByIdOrRef(id, req.user.id, hasBypass);
 
         if (!booking) {
             return res.status(404).json({ error: 'Booking not found' });
@@ -645,23 +652,27 @@ router.patch('/my-bookings/:id/update', requireAuth, async (req, res) => {
         const createdAt = new Date(booking.created_at).getTime();
         const isWithin15Mins = (Date.now() - createdAt <= EDIT_WINDOW_MS);
 
-        if (booking.status !== 'pending' && !isWithin15Mins) {
-            return res.status(400).json({ error: 'Only pending bookings or bookings within 15 minutes can be modified.' });
-        }
+        if (!hasBypass) {
+            if (booking.status !== 'pending' && !isWithin15Mins) {
+                return res.status(400).json({ error: 'Only pending bookings or bookings within 15 minutes can be modified.' });
+            }
 
-        if (!isWithin15Mins) {
-            return res.status(403).json({
-                error: 'The 15-minute editing window has expired. This booking can no longer be modified.'
-            });
+            if (!isWithin15Mins) {
+                return res.status(403).json({
+                    error: 'The 15-minute editing window has expired. This booking can no longer be modified.'
+                });
+            }
         }
         // ────────────────────────────────────────────────────────────────────
 
         // ─── Edit limit enforcement (max 2 edits) ──────────────────────────
-        const editCount = (booking.timeline || []).filter(item => item.status === 'Booking Edited').length;
-        if (editCount >= 2) {
-            return res.status(403).json({
-                error: 'You have reached the maximum allowed edits (2) for this booking.'
-            });
+        if (!hasBypass) {
+            const editCount = (booking.timeline || []).filter(item => item.status === 'Booking Edited').length;
+            if (editCount >= 2) {
+                return res.status(403).json({
+                    error: 'You have reached the maximum allowed edits (2) for this booking.'
+                });
+            }
         }
         // ────────────────────────────────────────────────────────────────────
 
