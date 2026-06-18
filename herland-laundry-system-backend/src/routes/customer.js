@@ -614,6 +614,14 @@ router.patch('/my-bookings/:id/update', requireAuth, async (req, res) => {
             return res.status(403).json({
                 error: 'The 15-minute editing window has expired. This booking can no longer be modified.'
             });
+        // ────────────────────────────────────────────────────────────────────
+
+        // ─── Edit limit enforcement (max 2 edits) ──────────────────────────
+        const editCount = (booking.timeline || []).filter(item => item.status === 'Booking Edited').length;
+        if (editCount >= 2) {
+            return res.status(403).json({
+                error: 'You have reached the maximum allowed edits (2) for this booking.'
+            });
         }
         // ────────────────────────────────────────────────────────────────────
 

@@ -195,6 +195,15 @@ export default function BookingDetails() {
       );
       return;
     }
+    
+    if (!isAdminOrStaff) {
+      const editCount = (booking?.timeline || []).filter(item => item.status === 'Booking Edited').length;
+      if (editCount >= 2) {
+        window.alert("You have reached the maximum allowed edits (2) within the 15-minute window. You cannot edit this booking anymore.");
+        return;
+      }
+    }
+
     navigate(`/book?edit=${bookingId}`);
   };
 
@@ -323,6 +332,53 @@ export default function BookingDetails() {
     }
   };
 
+  const handleFlagPayment = async () => {
+    if (!(await confirm('Are you sure you want to flag the payment for this booking?'))) return;
+
+    const newTimeline = [
+      ...(Array.isArray(booking.timeline) ? booking.timeline : []),
+      {
+        status: 'Payment Flagged',
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        showToast("Session expired. Please log in again.", "error");
+        return;
+      }
+
+      const ADMIN_API_BASE = `${import.meta.env.VITE_API_URL}/api/v1/admin`;
+      
+      const response = await fetch(`${ADMIN_API_BASE}/bookings/${bookingId}/status`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'Payment Flagged',
+          nextStage: 'payment',
+          timeline: newTimeline,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update booking status.');
+      }
+
+      showToast(`Booking updated to Payment Flagged.`, "success");
+      fetchBooking();
+    } catch (err) {
+      console.error("Error flagging payment:", err);
+      showToast("Could not flag the payment.", "error");
+    }
+  };
+
   const buildFullTimeline = (bk) => {
     if (!bk) return [];
 
@@ -442,6 +498,14 @@ export default function BookingDetails() {
           </button>
           <h1 className="text-2xl font-semibold">Booking Details</h1>
           <div className="ml-auto flex gap-2">
+            {isAdminOrStaff && booking && getBookingStatusKey(booking) === 'BookingReceived' && (
+              <button
+                onClick={handleFlagPayment}
+                className="rounded-lg border border-[#e55353] px-3 py-1.5 text-sm font-medium text-[#e55353] hover:bg-[#e55353]/5 transition"
+              >
+                Flag Payment
+              </button>
+            )}
             {isAdminOrStaff && booking && ACTION_EFFECTS[getBookingStatusKey(booking)] && (
               <button
                 onClick={handleNextStatus}

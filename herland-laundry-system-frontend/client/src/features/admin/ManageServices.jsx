@@ -277,7 +277,22 @@ export default function ManageServices() {
 
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('adminActivityHistory');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        return parsed.filter(log => {
+          const timestamp = Number(log.id.split('-')[0]);
+          return timestamp > sevenDaysAgo;
+        });
+      }
+    } catch (e) {
+      console.error('Error loading history:', e);
+    }
+    return [];
+  });
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editType, setEditType] = useState('');
@@ -326,7 +341,20 @@ export default function ManageServices() {
       }),
     };
 
-    setHistory((prev) => [newLog, ...prev]);
+    setHistory((prev) => {
+      const updated = [newLog, ...prev];
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const filtered = updated.filter(log => {
+        const timestamp = Number(log.id.split('-')[0]);
+        return timestamp > sevenDaysAgo;
+      });
+      try {
+        localStorage.setItem('adminActivityHistory', JSON.stringify(filtered));
+      } catch (e) {
+        console.error('Error saving history:', e);
+      }
+      return filtered;
+    });
   };
 
   const showSuccess = (message) => {
