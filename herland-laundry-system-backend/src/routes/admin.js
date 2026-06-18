@@ -460,6 +460,14 @@ router.get('/services', verifyRole('Admin'), async (req, res) => {
             })
             .filter(Boolean);
 
+        // Deduplicate load options by label to handle any existing duplicate database rows
+        const seenLabels = new Set();
+        loadOptions = loadOptions.filter(opt => {
+            if (seenLabels.has(opt.label)) return false;
+            seenLabels.add(opt.label);
+            return true;
+        });
+
         if (loadOptions.length === 0) {
             // Auto-seed default loads into the DB so the frontend always gets real UUIDs
             const defaultLoads = [
@@ -513,23 +521,39 @@ router.get('/services', verifyRole('Admin'), async (req, res) => {
     }
 });
 
-// Route: Add a new service or add-on
+// Route: Add a new service, add-on, or load type
 router.post('/services/items', verifyRole('Admin'), async (req, res) => {
-    const { type, name, currentPrice, estimatedHours } = req.body;
+    const { type, name, currentPrice, estimatedHours, label, sublabel, description } = req.body;
 
-    if (!type || !name || currentPrice === undefined) {
-        return res.status(400).json({ error: 'type, name, and currentPrice are required' });
+    if (!type || currentPrice === undefined) {
+        return res.status(400).json({ error: 'type and currentPrice are required' });
     }
-    if (!['service', 'addon'].includes(type)) {
-        return res.status(400).json({ error: 'type must be "service" or "addon"' });
+    if (!['service', 'addon', 'load'].includes(type)) {
+        return res.status(400).json({ error: 'type must be "service", "addon", or "load"' });
     }
 
     try {
+        let dbName = name;
+        let dbType = type;
+
+        if (type === 'load') {
+            if (!label || !sublabel || !description) {
+                return res.status(400).json({ error: 'label, sublabel, and description are required for load types' });
+            }
+            dbType = 'service';
+            dbName = JSON.stringify({ label, sublabel, description, isEnabled: true, isLoad: true });
+        } else {
+            if (!name) {
+                return res.status(400).json({ error: 'name is required' });
+            }
+            dbName = name.trim();
+        }
+
         // Get max sort_order for ordering
         const { data: existing } = await supabase
             .from('service_items')
             .select('sort_order')
-            .eq('type', type)
+            .eq('type', dbType)
             .order('sort_order', { ascending: false })
             .limit(1);
 
@@ -538,8 +562,8 @@ router.post('/services/items', verifyRole('Admin'), async (req, res) => {
         const { data, error } = await supabase
             .from('service_items')
             .insert({
-                type,
-                name: name.trim(),
+                type: dbType,
+                name: dbName,
                 current_price: Number(currentPrice),
                 previous_price: null,
                 estimated_hours: estimatedHours ? Number(estimatedHours) : 0,
@@ -550,13 +574,24 @@ router.post('/services/items', verifyRole('Admin'), async (req, res) => {
 
         if (error) throw error;
 
-        res.json({
-            id: data.id,
-            name: data.name,
-            currentPrice: Number(data.current_price),
-            previousPrice: null,
-            estimatedHours: Number(data.estimated_hours),
-        });
+        if (type === 'load') {
+            res.json({
+                id: data.id,
+                label,
+                sublabel,
+                description,
+                price: Number(data.current_price),
+                isEnabled: true
+            });
+        } else {
+            res.json({
+                id: data.id,
+                name: data.name,
+                currentPrice: Number(data.current_price),
+                previousPrice: null,
+                estimatedHours: Number(data.estimated_hours),
+            });
+        }
     } catch (error) {
         console.error('Add Service Item Error:', error.message);
         res.status(500).json({ error: 'Failed to add item' });

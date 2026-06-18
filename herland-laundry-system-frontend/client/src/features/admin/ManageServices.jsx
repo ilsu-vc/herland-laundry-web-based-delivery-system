@@ -504,6 +504,17 @@ export default function ManageServices() {
     setIsEditModalOpen(true);
   };
 
+  const openAddLoadModal = () => {
+    setEditType('add-load');
+    setEditItem({
+      label: '',
+      sublabel: '',
+      description: '',
+      price: '',
+    });
+    setIsEditModalOpen(true);
+  };
+
   const openEditScheduleModal = () => {
     setEditType('schedule');
     setEditItem({
@@ -585,6 +596,57 @@ export default function ManageServices() {
 
         addHistory('Load type updated', `${updatedLoad.label} was updated.`);
         showSuccess('Load type updated successfully.');
+        closeEditModal();
+        return;
+      }
+
+      if (editType === 'add-load') {
+        const newLoad = {
+          label: editItem.label.trim(),
+          sublabel: editItem.sublabel.trim(),
+          description: editItem.description.trim(),
+          price: Number(editItem.price),
+        };
+
+        if (
+          !newLoad.label ||
+          !newLoad.sublabel ||
+          !newLoad.description ||
+          Number.isNaN(newLoad.price) ||
+          newLoad.price < 0
+        ) {
+          setFetchError('Please enter a valid load type label, sublabel, description, and price.');
+          return;
+        }
+
+        const headers = await getAuthHeaders();
+
+        const response = await fetch(`${API_BASE}/services/items`, {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'load',
+            label: newLoad.label,
+            sublabel: newLoad.sublabel,
+            description: newLoad.description,
+            currentPrice: newLoad.price,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Unable to add load type.');
+        }
+
+        const createdLoad = await response.json();
+
+        setLoadOptions((prev) => [...prev, createdLoad]);
+        setLoadEnabled((prev) => ({ ...prev, [createdLoad.id]: true }));
+
+        addHistory('Load type added', `${newLoad.label} was added.`);
+        showSuccess('Load type added successfully.');
         closeEditModal();
         return;
       }
@@ -771,6 +833,24 @@ export default function ManageServices() {
     setShowDeleteConfirmModal(false);
   };
 
+  const triggerDeleteFromEdit = () => {
+    if (!editItem) return;
+
+    const itemToDelete = {
+      id: editItem.id,
+      name: editType === 'load' ? editItem.label : editItem.name,
+      label: editType === 'load' ? editItem.label : undefined,
+    };
+
+    setPendingDelete({
+      type: editType,
+      item: itemToDelete,
+    });
+
+    closeEditModal();
+    setShowDeleteConfirmModal(true);
+  };
+
   const handleDeleteItem = async () => {
     if (!pendingDelete) return;
 
@@ -784,11 +864,22 @@ export default function ManageServices() {
       });
 
       if (!response.ok) {
-        throw new Error('Unable to delete service.');
+        throw new Error('Unable to delete item.');
       }
 
-      setServices((prev) => prev.filter((item) => item.id !== pendingDelete.item.id));
-      addHistory('Service deleted', `${pendingDelete.item.name} was deleted.`);
+      if (pendingDelete.type === 'load') {
+        setLoadOptions((prev) => prev.filter((item) => item.id !== pendingDelete.item.id));
+        setLoadEnabled((prev) => {
+          const next = { ...prev };
+          delete next[pendingDelete.item.id];
+          return next;
+        });
+      } else {
+        setServices((prev) => prev.filter((item) => item.id !== pendingDelete.item.id));
+      }
+
+      const itemName = pendingDelete.item.name || pendingDelete.item.label || 'Item';
+      addHistory('Service deleted', `${itemName} was deleted.`);
       showSuccess('Service deleted successfully.');
       closeDeleteModal();
     } catch (error) {
@@ -1140,7 +1231,25 @@ export default function ManageServices() {
         </button>
       </div>
 
-      <SectionLabel>Load Types</SectionLabel>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <SectionLabel style={{ marginBottom: 0 }}>Load Types</SectionLabel>
+        <button
+          type="button"
+          onClick={openAddLoadModal}
+          style={{
+            padding: '7px 18px',
+            borderRadius: '0.75rem',
+            background: Colors.blue,
+            color: Colors.white,
+            fontSize: '0.875rem',
+            fontWeight: 800,
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          Add Load Type
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5" style={{ marginBottom: 32 }}>
         {loadOptions.map((opt) => {
@@ -1153,6 +1262,9 @@ export default function ManageServices() {
                 ...card,
                 padding: '1.25rem 1.375rem',
                 position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
               }}
             >
               <div style={{ position: 'absolute', top: 14, right: 14 }}>
@@ -1170,7 +1282,7 @@ export default function ManageServices() {
                 </span>
               </div>
 
-              <div style={{ paddingRight: 70, marginBottom: 12 }}>
+              <div style={{ paddingRight: 70, marginBottom: 12, flex: 1 }}>
                 <h3 style={{ ...typography.h3, marginBottom: 2 }}>{opt.label}</h3>
                 <p
                   style={{
@@ -1196,44 +1308,46 @@ export default function ManageServices() {
                 <p style={{ ...typography.small, lineHeight: 1.6 }}>{opt.description}</p>
               </div>
 
-              <div style={{ height: 1, background: Colors.skyBd, margin: '12px 0' }} />
+              <div style={{ marginTop: 'auto' }}>
+                <div style={{ height: 1, background: Colors.skyBd, margin: '12px 0' }} />
 
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => openEditItemModal('load', opt)}
-                  style={{
-                    flex: 1,
-                    padding: '7px 0',
-                    borderRadius: '0.625rem',
-                    background: Colors.skyFaint,
-                    color: Colors.blue,
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    border: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Edit
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => openEditItemModal('load', opt)}
+                    style={{
+                      flex: 1,
+                      padding: '7px 0',
+                      borderRadius: '0.625rem',
+                      background: Colors.skyFaint,
+                      color: Colors.blue,
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Edit
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleToggleLoadEnabled(opt)}
-                  style={{
-                    flex: 1,
-                    padding: '7px 0',
-                    borderRadius: '0.625rem',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: enabled ? Colors.dangerFaint : Colors.greenFaint,
-                    color: enabled ? Colors.danger : Colors.green,
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  {enabled ? 'Disable' : 'Enable'}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleLoadEnabled(opt)}
+                    style={{
+                      flex: 1,
+                      padding: '7px 0',
+                      borderRadius: '0.625rem',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: enabled ? Colors.dangerFaint : Colors.greenFaint,
+                      color: enabled ? Colors.danger : Colors.green,
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {enabled ? 'Disable' : 'Enable'}
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -1566,14 +1680,16 @@ export default function ManageServices() {
         </div>
       </div>
 
-      {isEditModalOpen && editItem && (
+       {isEditModalOpen && editItem && (
         <Modal
           title={
             editType === 'schedule'
               ? 'Edit Shop Schedule'
               : editType === 'load'
                 ? 'Edit Load Type'
-                : 'Edit Item'
+                : editType === 'add-load'
+                  ? 'Add Load Type'
+                  : 'Edit Item'
           }
           onClose={closeEditModal}
         >
@@ -1615,23 +1731,25 @@ export default function ManageServices() {
                 />
               </Field>
             </div>
-          ) : editType === 'load' ? (
+          ) : (editType === 'load' || editType === 'add-load') ? (
             <div style={{ display: 'grid', gap: 14 }}>
-              <Field label="Load Type ID">
-                <input
-                  value={editItem.id}
-                  onChange={(event) =>
-                    setEditItem((prev) => ({ ...prev, id: event.target.value }))
-                  }
-                  style={{
-                    width: '100%',
-                    border: `1px solid ${Colors.border}`,
-                    borderRadius: '0.75rem',
-                    padding: '0.75rem 0.85rem',
-                    outline: 'none',
-                  }}
-                />
-              </Field>
+              {editType === 'load' && (
+                <Field label="Load Type ID">
+                  <input
+                    value={editItem.id}
+                    onChange={(event) =>
+                      setEditItem((prev) => ({ ...prev, id: event.target.value }))
+                    }
+                    style={{
+                      width: '100%',
+                      border: `1px solid ${Colors.border}`,
+                      borderRadius: '0.75rem',
+                      padding: '0.75rem 0.85rem',
+                      outline: 'none',
+                    }}
+                  />
+                </Field>
+              )}
 
               <Field label="Label">
                 <input
@@ -1757,7 +1875,26 @@ export default function ManageServices() {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end', alignItems: 'center' }}>
+            {editType !== 'schedule' && editType !== 'add-load' && (
+              <button
+                type="button"
+                onClick={triggerDeleteFromEdit}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '0.75rem',
+                  background: Colors.dangerFaint,
+                  color: Colors.danger,
+                  fontSize: '0.875rem',
+                  fontWeight: 800,
+                  border: 'none',
+                  cursor: 'pointer',
+                  marginRight: 'auto',
+                }}
+              >
+                Delete
+              </button>
+            )}
             <button
               type="button"
               onClick={closeEditModal}

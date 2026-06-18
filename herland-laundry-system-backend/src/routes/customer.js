@@ -56,13 +56,21 @@ router.get('/services', async (req, res) => {
                         sublabel: parsed.sublabel || '',
                         description: parsed.description || '',
                         price: Number(i.current_price),
-                        isEnabled: parsed.isEnabled,
+                        isEnabled: parsed.isEnabled !== false,
                     };
                 } catch (e) {
                     return null;
                 }
             })
             .filter(i => i !== null);
+
+        // Deduplicate load options by label to handle any existing duplicate database rows
+        const seenLabels = new Set();
+        loadOptions = loadOptions.filter(opt => {
+            if (seenLabels.has(opt.label)) return false;
+            seenLabels.add(opt.label);
+            return true;
+        });
 
         const hasDbLoads = (items || []).some(i => i.name && i.name.includes('"isLoad":true'));
         if (!hasDbLoads) {
@@ -96,7 +104,7 @@ router.get('/services', async (req, res) => {
                         sublabel: parsed.sublabel || '',
                         description: parsed.description || '',
                         price: Number(i.current_price),
-                        isEnabled: parsed.isEnabled,
+                        isEnabled: parsed.isEnabled !== false,
                     };
                 });
             }
