@@ -7,9 +7,9 @@ if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
 }
 
 // Use service role key on the backend to bypass RLS
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-);
+const supabaseUrl = (process.env.SUPABASE_URL || "").trim();
+const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "").trim();
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 module.exports = supabase;
