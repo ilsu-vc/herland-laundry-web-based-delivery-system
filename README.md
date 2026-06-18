@@ -7,18 +7,15 @@ A full-stack laundry booking and management system built with **React + Vite** (
 ## 📦 Project Structure
 
 ```
-herland-laundry-system-main/
-├── docker-compose.yml              ← One file to run everything
-├── .env.example                    ← Root env vars (for production Docker builds)
+herland-laundry-system/
+├── docker-compose.yml              ← One file to run everything (Optional)
+├── .env.example                    ← Root env vars (for Docker builds)
 │
 ├── herland-laundry-system-backend/
-│   ├── Dockerfile                  ← Multi-stage: dev + production
 │   ├── .env.example                ← Backend secrets template
 │   └── src/                        ← Express API source code
 │
 ├── herland-laundry-system-frontend/
-│   ├── Dockerfile                  ← Multi-stage: dev + builder + production
-│   ├── nginx.conf                  ← Production nginx config (SPA routing)
 │   └── client/
 │       ├── .env.example            ← Frontend secrets template
 │       └── src/                    ← React source code
@@ -28,95 +25,56 @@ herland-laundry-system-main/
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Running Natively)
+
+This is the recommended way to run the application to save system resources and disk space.
 
 ### Prerequisites
 
-- **Docker Desktop** installed and running — [Download here](https://www.docker.com/products/docker-desktop/)
+- **Node.js** (v18 or higher)
 - **Git** installed
 
-### 1. Clone the repository
+### 1. Clone the Repository
 
 ```bash
-git clone -b main --single-branch https://github.com/ilsu-vc/herland-laundry-system.git
-cd herland-laundry-system-main
+git clone -b Tea-Branch-2 --single-branch https://github.com/ilsu-vc/herland-laundry-system.git
+cd herland-laundry-system
 ```
 
-### 2. Set up environment variables
+### 2. Set Up Environment Variables
 
 Create `.env` files from the provided templates:
 
-**For Backend:**
+**For Backend (`herland-laundry-system-backend/.env`):**
 ```bash
 cp herland-laundry-system-backend/.env.example herland-laundry-system-backend/.env
 ```
+Ensure the `.env` file contains the following configurations:
+```env
+PORT=5000
+NODE_ENV=development
+SUPABASE_URL=https://pipjndxdustaobgonnam.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpcGpuZHhkdXN0YW9iZ29ubmFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNDE4NDAsImV4cCI6MjA4NTkxNzg0MH0.zK9H7_3T_2nJsTkCRKrJcB0zIu1QZ7Hvo96_gyP80nI
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpcGpuZHhkdXN0YW9iZ29ubmFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNDE4NDAsImV4cCI6MjA4NTkxNzg0MH0.zK9H7_3T_2nJsTkCRKrJcB0zIu1QZ7Hvo96_gyP80nI
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpcGpuZHhkdXN0YW9iZ29ubmFtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDM0MTg0MCwiZXhwIjoyMDg1OTE3ODQwfQ.DHeas2wFeF8SG5SEz-o-OdYpcl2uzeWfyx8gVyZsevc
+VITE_GOOGLE_MAPS_API_KEY=AIzaSyDf8AmofnJ6skkxMRX0CRsKsQwZWyggJyA
+```
 
-**For Frontend:**
+**For Frontend (`herland-laundry-system-frontend/client/.env`):**
 ```bash
 cp herland-laundry-system-frontend/client/.env.example herland-laundry-system-frontend/client/.env
 ```
-
-**For Root (production builds only):**
-```bash
-cp .env.example .env
+Ensure the `.env` file contains the following configurations:
+```env
+VITE_API_URL=http://localhost:5000
+VITE_SUPABASE_URL=https://pipjndxdustaobgonnam.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpcGpuZHhkdXN0YW9iZ29ubmFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNDE4NDAsImV4cCI6MjA4NTkxNzg0MH0.zK9H7_3T_2nJsTkCRKrJcB0zIu1QZ7Hvo96_gyP80nI
+VITE_GOOGLE_MAPS_API_KEY=AIzaSyDf8AmofnJ6skkxMRX0CRsKsQwZWyggJyA
 ```
 
-> ⚠️ **IMPORTANT:** Fill in the actual values in each `.env` file (Supabase keys, Google Maps API key, etc.). Ask the project lead for the credentials. The system will NOT work without proper environment variables.
+### 3. Run the Application
 
-> ⚠️ **Never commit `.env` files.** They are already listed in `.gitignore`.
-
-### 3. Start the application
-
-#### 🔧 Development mode (with hot-reload)
-
-```bash
-docker compose --profile dev up --build
-```
-
-**Wait for these messages in the terminal:**
-
-Backend should show:
-```
-✅ Connection Successful! Database is talking to the Backend.
-🚀 Herland Backend running on http://localhost:5000
-```
-
-Frontend should show:
-```
-VITE v5.x.x  ready in xxx ms
-
-➜  Local:   http://localhost:5173/
-➜  Network: use --host to expose
-```
-
-| Service  | URL                        |
-|----------|----------------------------|
-| Frontend | http://localhost:5173       |
-| Backend  | http://localhost:5000       |
-
-- Edit any file in your IDE → changes reflect instantly inside the containers.
-- Press `Ctrl + C` to stop, or run `docker compose --profile dev down`.
-
-#### 🏭 Production mode (optimized build)
-
-```bash
-docker compose --profile prod up --build -d
-```
-
-| Service  | URL                        |
-|----------|----------------------------|
-| Frontend | http://localhost (port 80)  |
-| Backend  | http://localhost:5000       |
-
-- The frontend is compiled into static files and served by **nginx** (~30 MB image).
-- The backend runs with plain **Node.js** (no nodemon) (~60 MB image).
-- Stop with: `docker compose --profile prod down`
-
----
-
-## 🖥️ Running WITHOUT Docker (native)
-
-If Docker is too heavy for your machine, you can run the services directly:
+Run the backend and frontend servers in separate terminal windows:
 
 **Terminal 1 — Backend:**
 ```bash
@@ -140,14 +98,30 @@ npm run dev
 
 You should see:
 ```
-VITE v5.x.x  ready in xxx ms
+VITE v7.x.x  ready in xxx ms
 
 ➜  Local:   http://localhost:5173/
 ```
 
-The frontend runs at `http://localhost:5173` and the backend at `http://localhost:5000`.
+- **Frontend App:** http://localhost:5173
+- **Backend API:** http://localhost:5000
 
 ---
+
+## 🐳 Alternative: Running with Docker (Optional)
+
+If you prefer to run with Docker instead:
+
+1. Follow steps 1 and 2 to set up environment files.
+2. Run in development mode (hot-reload):
+   ```bash
+   docker compose --profile dev up --build
+   ```
+3. Run in production mode:
+   ```bash
+   docker compose --profile prod up --build -d
+   ```
+
 
 ## 🔧 Troubleshooting
 

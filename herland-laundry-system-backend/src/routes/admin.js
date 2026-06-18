@@ -560,7 +560,7 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
             }
         }
 
-        if (type === 'load' && isNaN(parseInt(id))) {
+        if (type === 'load' && ['heavy', 'regular', 'perPiece'].includes(id)) {
             const { data: newRow, error: insertError } = await supabase
                 .from('service_items')
                 .insert({

@@ -8,9 +8,8 @@ This guide will help you get the Herland Laundry System running on your local ma
 
 Before you start, make sure you have:
 
-- [ ] **Docker Desktop** installed and running ([Download](https://www.docker.com/products/docker-desktop/))
+- [ ] **Node.js** (v18 or higher) installed
 - [ ] **Git** installed
-- [ ] **Environment variables** from the project lead (Supabase keys, Google Maps API key)
 
 ---
 
@@ -19,70 +18,79 @@ Before you start, make sure you have:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone -b main --single-branch https://github.com/ilsu-vc/herland-laundry-system.git
-cd herland-laundry-system-main
+git clone -b Tea-Branch-2 --single-branch https://github.com/ilsu-vc/herland-laundry-system.git
+cd herland-laundry-system
 ```
 
 ### Step 2: Create Environment Files
 
-Run these commands in the **root folder** (`herland-laundry-system-main/`):
+Run these commands in the **root folder** (`herland-laundry-system/`):
 
 ```bash
-# Backend
+# Backend env file
 cp herland-laundry-system-backend/.env.example herland-laundry-system-backend/.env
 
-# Frontend
+# Frontend client env file
 cp herland-laundry-system-frontend/client/.env.example herland-laundry-system-frontend/client/.env
-
-# Root (for production builds)
-cp .env.example .env
 ```
 
-### Step 3: Fill in Environment Variables
+### Step 3: Configure Environment Variables
 
-**Ask the project lead for the actual values!** Then edit these files:
+Edit the `.env` files with your actual credentials:
 
-1. **`herland-laundry-system-backend/.env`**
-   - Add your Supabase URL, keys, and service role key
-   - Add Google Maps API key
+1. **`herland-laundry-system-backend/.env`**:
+   ```env
+   PORT=5000
+   NODE_ENV=development
+   SUPABASE_URL=https://pipjndxdustaobgonnam.supabase.co
+   SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   VITE_GOOGLE_MAPS_API_KEY=AIzaSyDf8AmofnJ6skkxMRX0CRsKsQwZWyggJyA
+   ```
 
-2. **`herland-laundry-system-frontend/client/.env`**
-   - Add your Supabase URL and anon key
-   - Add Google Maps API key
-   - Set `VITE_API_URL=http://localhost:5000` (no `/api/v1` at the end!)
+2. **`herland-laundry-system-frontend/client/.env`**:
+   ```env
+   VITE_API_URL=http://localhost:5000
+   VITE_SUPABASE_URL=https://pipjndxdustaobgonnam.supabase.co
+   VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   VITE_GOOGLE_MAPS_API_KEY=AIzaSyDf8AmofnJ6skkxMRX0CRsKsQwZWyggJyA
+   ```
 
-3. **`.env`** (root folder)
-   - Same as frontend, but for production Docker builds
+### Step 4: Start Backend
 
-### Step 4: Start the Application
-
-Run this command in the **root folder**:
-
+Open a terminal and run:
 ```bash
-docker compose --profile dev up --build
+cd herland-laundry-system-backend
+npm install
+npm run dev
 ```
 
-### Step 5: Verify It's Working
-
-**Wait for these messages in your terminal:**
-
-✅ **Backend (should appear first):**
+Wait for this message:
 ```
 ✅ Connection Successful! Database is talking to the Backend.
 🚀 Herland Backend running on http://localhost:5000
 ```
 
-✅ **Frontend (should appear after backend):**
-```
-VITE v5.x.x  ready in xxx ms
+### Step 5: Start Frontend
 
-➜  Local:   http://localhost:5173/
-➜  Network: use --host to expose
+Open a second terminal and run:
+```bash
+cd herland-laundry-system-frontend/client
+npm install
+npm run dev
+```
+
+Wait for this message:
+```
+  VITE v7.x.x  ready in xxx ms
+
+  ➜  Local:   http://localhost:5173/
 ```
 
 ### Step 6: Open in Browser
 
-- **Frontend:** http://localhost:5173
+- **Frontend App:** http://localhost:5173
 - **Backend API:** http://localhost:5000
 
 ---

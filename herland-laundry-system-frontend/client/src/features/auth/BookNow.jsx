@@ -513,6 +513,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
             saveHomeAddress={saveHomeAddress}
             clearBookingState={clearBookingState}
             onEditSuccess={onEditSuccess}
+            availableLoads={availableLoads}
           />
         )}
       </div>
