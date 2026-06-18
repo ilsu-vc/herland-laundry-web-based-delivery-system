@@ -113,6 +113,24 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
     lat: null,
     lng: null
   }));
+  const [bookedSlots, setBookedSlots] = useState([]);
+
+  useEffect(() => {
+    const fetchBookedSlots = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/customer/booked-slots`);
+        if (response.ok) {
+          const data = await response.json();
+          setBookedSlots(data || []);
+        }
+      } catch (err) {
+        console.error("Error fetching booked slots:", err);
+      }
+    };
+    if (step === 2 || step === 4) {
+      fetchBookedSlots();
+    }
+  }, [step]);
 
   // Save all booking state to localStorage
   useEffect(() => {
@@ -461,6 +479,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
             deliveryInfo={deliveryInfo}
             setDeliveryInfo={setDeliveryInfo}
             totalEstimatedHours={calculateTotalEstimatedHours()}
+            bookedSlots={bookedSlots}
           />
         )}
         {step === 3 && (
@@ -1370,7 +1389,8 @@ function isUnavailableScheduleDate(date) {
   return date === getTodayDateString() && areAllTodayTimeSlotsPast();
 }
 
-function ScheduleCard({ title, dateLabel, date, onDateChange, slot, onSlotChange }) {
+function ScheduleCard({ title, dateLabel, date, onDateChange, slot, onSlotChange, bookedSlots = [], isPickup }) {
+  const { showToast } = useToast();
   const minScheduleDate = getScheduleMinDateString();
 
   return (
@@ -1461,22 +1481,37 @@ function ScheduleCard({ title, dateLabel, date, onDateChange, slot, onSlotChange
           {timeSlots.map(({ id, label, time }) => {
             const active = slot === id;
             const disabled = isPastSlotToday(date, id);
+            
+            // Capacity Limit Check
+            const slotTimeVal = getSlotTime(id);
+            const matchingSlot = (bookedSlots || []).find(
+              (s) => s.date === date && s.time === slotTimeVal
+            );
+            const slotCount = matchingSlot
+              ? (isPickup ? matchingSlot.pickup_count : matchingSlot.delivery_count)
+              : 0;
+            const isFull = slotCount >= 8;
 
             return (
               <button
                 type="button"
                 key={id}
                 onClick={() => {
-                  if (!disabled) onSlotChange(id);
+                  if (disabled) return;
+                  if (isFull) {
+                    showToast(`The ${isPickup ? "pickup" : "delivery"} slot for this date is fully booked. Please choose another time.`, "error");
+                    return;
+                  }
+                  onSlotChange(id);
                 }}
                 disabled={disabled}
                 style={{
                   flex: 1,
-                  border: `2px solid ${active ? "#3878c2" : "#e5e7eb"}`,
+                  border: `2px solid ${isFull ? "#fecaca" : active ? "#3878c2" : "#e5e7eb"}`,
                   borderRadius: "0.75rem",
                   padding: "0.875rem 0.75rem",
-                  background: active ? "rgba(56,120,194,0.05)" : "#fff",
-                  cursor: disabled ? "not-allowed" : "pointer",
+                  background: isFull ? "#fff5f5" : active ? "rgba(56,120,194,0.05)" : "#fff",
+                  cursor: disabled ? "not-allowed" : isFull ? "not-allowed" : "pointer",
                   textAlign: "center",
                   transition: "all 0.15s",
                   fontFamily: "Inter, sans-serif",
@@ -1487,7 +1522,7 @@ function ScheduleCard({ title, dateLabel, date, onDateChange, slot, onSlotChange
                   style={{
                     fontWeight: 700,
                     fontSize: "0.875rem",
-                    color: active ? "#3878c2" : "#374151",
+                    color: isFull ? "#ef4444" : active ? "#3878c2" : "#374151",
                     marginBottom: 2,
                   }}
                 >
@@ -1501,7 +1536,7 @@ function ScheduleCard({ title, dateLabel, date, onDateChange, slot, onSlotChange
                     fontWeight: 500,
                   }}
                 >
-                  {time}
+                  {time} {isFull && <span style={{ color: "#ef4444", fontWeight: 700 }}>• Full</span>}
                 </p>
               </button>
             );
@@ -1520,6 +1555,7 @@ function StepSchedule({
   deliveryInfo,
   setDeliveryInfo,
   totalEstimatedHours,
+  bookedSlots = [],
 }) {
   const { showToast } = useToast();
   const [error, setError] = useState("");
@@ -1568,6 +1604,29 @@ function StepSchedule({
 
     if (deliveryDateTime <= collectionDateTime) {
       return "Delivery schedule must be after the pickup schedule.";
+    }
+
+    // Capacity Limit Check
+    if (collectionInfo.date && collectionInfo.collectionSlot) {
+      const timeVal = getSlotTime(collectionInfo.collectionSlot);
+      const matchingSlot = (bookedSlots || []).find(
+        (s) => s.date === collectionInfo.date && s.time === timeVal
+      );
+      const slotCount = matchingSlot ? matchingSlot.pickup_count : 0;
+      if (slotCount >= 8) {
+        return "The selected pickup slot is fully booked. Please choose another time.";
+      }
+    }
+
+    if (deliveryInfo.date && deliveryInfo.deliverySlot) {
+      const timeVal = getSlotTime(deliveryInfo.deliverySlot);
+      const matchingSlot = (bookedSlots || []).find(
+        (s) => s.date === deliveryInfo.date && s.time === timeVal
+      );
+      const slotCount = matchingSlot ? matchingSlot.delivery_count : 0;
+      if (slotCount >= 8) {
+        return "The selected delivery slot is fully booked. Please choose another time.";
+      }
     }
 
     return "";
@@ -1699,6 +1758,8 @@ function StepSchedule({
           onDateChange={updatePickupDate}
           slot={collectionInfo.collectionSlot}
           onSlotChange={updatePickupSlot}
+          bookedSlots={bookedSlots}
+          isPickup={true}
         />
 
         <ScheduleCard
@@ -1708,6 +1769,8 @@ function StepSchedule({
           onDateChange={updateDeliveryDate}
           slot={deliveryInfo.deliverySlot}
           onSlotChange={updateDeliverySlot}
+          bookedSlots={bookedSlots}
+          isPickup={false}
         />
       </div>
 
