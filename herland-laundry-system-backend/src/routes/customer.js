@@ -640,14 +640,16 @@ router.patch('/my-bookings/:id/update', requireAuth, async (req, res) => {
             return res.status(404).json({ error: 'Booking not found' });
         }
 
-        if (booking.status !== 'pending') {
-            return res.status(400).json({ error: 'Only pending bookings can be modified.' });
-        }
-
         // ─── 15-minute edit window enforcement ──────────────────────────────
         const EDIT_WINDOW_MS = 15 * 60 * 1000;
         const createdAt = new Date(booking.created_at).getTime();
-        if (Date.now() - createdAt > EDIT_WINDOW_MS) {
+        const isWithin15Mins = (Date.now() - createdAt <= EDIT_WINDOW_MS);
+
+        if (booking.status !== 'pending' && !isWithin15Mins) {
+            return res.status(400).json({ error: 'Only pending bookings or bookings within 15 minutes can be modified.' });
+        }
+
+        if (!isWithin15Mins) {
             return res.status(403).json({
                 error: 'The 15-minute editing window has expired. This booking can no longer be modified.'
             });

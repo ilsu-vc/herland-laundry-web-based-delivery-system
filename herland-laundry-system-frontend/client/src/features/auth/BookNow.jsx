@@ -212,8 +212,12 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
           });
           if (response.ok) {
             const data = await response.json();
-            if (data.status.toLowerCase() !== "pending") {
-              showToast("Only pending bookings can be edited.", "error");
+            const EDIT_WINDOW_MS = 15 * 60 * 1000;
+            const createdAt = new Date(data.created_at).getTime();
+            const isWithin15Mins = (Date.now() - createdAt <= EDIT_WINDOW_MS);
+
+            if (data.status.toLowerCase() !== "pending" && !isWithin15Mins) {
+              showToast("Only pending bookings or bookings within 15 minutes can be edited.", "error");
               if (onCancel) {
                 onCancel();
               } else {
@@ -282,7 +286,7 @@ export default function BookNow({ inlineEditId, onEditSuccess, onCancel }) {
       };
       fetchBooking();
     }
-  }, [isEditMode, editId]);
+  }, [isEditMode, editId, loadingServices, availableServices]);
 
   const steps = [
     "Laundry Details",
