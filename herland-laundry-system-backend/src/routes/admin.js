@@ -461,11 +461,40 @@ router.get('/services', verifyRole('Admin'), async (req, res) => {
             .filter(Boolean);
 
         if (loadOptions.length === 0) {
-            loadOptions = [
-                { id: 'regular', label: 'Regular Light Mix', sublabel: 'Up to 7.5 kg', description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.', price: 220 },
-                { id: 'heavy', label: 'Heavy Load', sublabel: 'Up to 5 kg', description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.', price: 220 },
-                { id: 'perPiece', label: 'Per Piece', sublabel: '₱220 per item', description: 'Comforter, Duvet, Pillow, etc.', price: 220 },
+            // Auto-seed default loads into the DB so the frontend always gets real UUIDs
+            const defaultLoads = [
+                { label: 'Regular Light Mix', sublabel: 'Up to 7.5 kg', description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.', isEnabled: true, isLoad: true },
+                { label: 'Heavy Load', sublabel: 'Up to 5 kg', description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.', isEnabled: true, isLoad: true },
+                { label: 'Per Piece', sublabel: '₱220 per item', description: 'Comforter, Duvet, Pillow, etc.', isEnabled: true, isLoad: true },
             ];
+
+            const insertRows = defaultLoads.map(load => ({
+                type: 'service',
+                name: JSON.stringify(load),
+                current_price: 220,
+                previous_price: null,
+                estimated_hours: 0,
+                sort_order: 99,
+            }));
+
+            const { data: seeded, error: seedError } = await supabase
+                .from('service_items')
+                .insert(insertRows)
+                .select();
+
+            if (!seedError && seeded) {
+                loadOptions = seeded.map(i => {
+                    const parsed = JSON.parse(i.name);
+                    return {
+                        id: i.id,
+                        label: parsed.label || '',
+                        sublabel: parsed.sublabel || '',
+                        description: parsed.description || '',
+                        price: Number(i.current_price),
+                        isEnabled: parsed.isEnabled !== false,
+                    };
+                });
+            }
         }
 
         const schedule = scheduleRows && scheduleRows.length > 0
@@ -560,44 +589,9 @@ router.put('/services/items/:id', verifyRole('Admin'), async (req, res) => {
             }
         }
 
-        // If the ID is a fallback string (not a real UUID), find the existing row by label first
+        // Fallback string IDs should never reach here — the GET route auto-seeds real UUIDs
         if (type === 'load' && ['heavy', 'regular', 'perPiece'].includes(id)) {
-            // Search for an existing load with this label in the DB
-            const { data: existingRows } = await supabase
-                .from('service_items')
-                .select('*')
-                .eq('type', 'service')
-                .like('name', `%"isLoad":true%`)
-                .like('name', `%"label":"${label}"%`);
-
-            if (existingRows && existingRows.length > 0) {
-                // Update the FIRST matching row (use its real UUID)
-                const realId = existingRows[0].id;
-                const { error: updateError } = await supabase
-                    .from('service_items')
-                    .update(updateData)
-                    .eq('id', realId);
-
-                if (updateError) throw updateError;
-                return res.json({ message: 'Item updated successfully', newId: realId });
-            }
-
-            // No existing row found — insert one
-            const { data: newRow, error: insertError } = await supabase
-                .from('service_items')
-                .insert({
-                    type: 'service',
-                    name: JSON.stringify({ label, sublabel, description, isEnabled, isLoad: true }),
-                    current_price: Number(currentPrice),
-                    previous_price: null,
-                    estimated_hours: 0,
-                    sort_order: 99
-                })
-                .select()
-                .single();
-
-            if (insertError) throw insertError;
-            return res.json({ message: 'Item inserted successfully', newId: newRow.id });
+            return res.status(400).json({ error: 'Invalid load type ID. Please refresh the page and try again.' });
         }
 
         // Standard update path for real UUID IDs

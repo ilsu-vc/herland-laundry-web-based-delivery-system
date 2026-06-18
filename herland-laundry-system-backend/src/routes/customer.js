@@ -66,11 +66,40 @@ router.get('/services', async (req, res) => {
 
         const hasDbLoads = (items || []).some(i => i.name && i.name.includes('"isLoad":true'));
         if (!hasDbLoads) {
-            loadOptions = [
-                { id: 'regular', label: 'Regular Light Mix', sublabel: 'Up to 7.5 kg', description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.', price: 220 },
-                { id: 'heavy', label: 'Heavy Load', sublabel: 'Up to 5 kg', description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.', price: 220 },
-                { id: 'perPiece', label: 'Per Piece', sublabel: '₱220 per item', description: 'Comforter, Duvet, Pillow, etc.', price: 220 },
+            // Auto-seed default loads into the DB so the frontend always gets real UUIDs
+            const defaultLoads = [
+                { label: 'Regular Light Mix', sublabel: 'Up to 7.5 kg', description: 'Shirts, Blouses/Polo, Pants, Socks, Underwear, etc.', isEnabled: true, isLoad: true },
+                { label: 'Heavy Load', sublabel: 'Up to 5 kg', description: 'Beddings, Towels, Jeans, Fleece, Regular Jackets, etc.', isEnabled: true, isLoad: true },
+                { label: 'Per Piece', sublabel: '₱220 per item', description: 'Comforter, Duvet, Pillow, etc.', isEnabled: true, isLoad: true },
             ];
+
+            const insertRows = defaultLoads.map(load => ({
+                type: 'service',
+                name: JSON.stringify(load),
+                current_price: 220,
+                previous_price: null,
+                estimated_hours: 0,
+                sort_order: 99,
+            }));
+
+            const { data: seeded, error: seedError } = await supabase
+                .from('service_items')
+                .insert(insertRows)
+                .select();
+
+            if (!seedError && seeded) {
+                loadOptions = seeded.map(i => {
+                    const parsed = JSON.parse(i.name);
+                    return {
+                        id: i.id,
+                        label: parsed.label || '',
+                        sublabel: parsed.sublabel || '',
+                        description: parsed.description || '',
+                        price: Number(i.current_price),
+                        isEnabled: parsed.isEnabled,
+                    };
+                });
+            }
         }
 
         let { data: faqs, error: faqsError } = await supabase
